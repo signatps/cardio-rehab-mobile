@@ -1,0 +1,31 @@
+name: Feature request
+description: Propozycja funkcji lub usprawnienia
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / potrzeba
+      description: Jaki problem rozwiązujemy?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Propozycja
+      description: Jak to powinno działać?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Obszar
+      options:
+        - Bluetooth / EHO-Mini
+        - Sesja rehabilitacji
+        - UI / UX
+        - CI / tooling
+        - Inne
+    validations:
+      required: true

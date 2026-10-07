@@ -1,0 +1,10 @@
+# Optional future use with actions/labeler
+bluetooth:
+  - changed-files:
+      - any-glob-to-any-file: app/src/main/java/pl/cardioscp/rehab/bluetooth/**
+docs:
+  - changed-files:
+      - any-glob-to-any-file: docs/**
+ci:
+  - changed-files:
+      - any-glob-to-any-file: .github/workflows/**

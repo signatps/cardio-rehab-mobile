@@ -1,0 +1,26 @@
+name: Protocol / device task
+description: Zadanie związane z protokołem EHO-Mini lub wsadem
+title: "[protocol] "
+labels: ["bluetooth", "eho-mini"]
+body:
+  - type: textarea
+    id: context
+    attributes:
+      label: Kontekst z dokumentacji / wsadu
+      description: Fragment protokołu, UUID, komenda, zachowanie urządzenia.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Kryteria akceptacji
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: input
+    id: docs_ref
+    attributes:
+      label: Referencja do pliku docs/
+      placeholder: docs/protocol/eho-mini.md#scan

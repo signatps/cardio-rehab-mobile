@@ -1,0 +1,42 @@
+name: Bug report
+description: Zgłoś błąd w aplikacji lub warstwie Bluetooth
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Opisz problem możliwie precyzyjnie — szczególnie w kontekście EHO-Mini / Bluetooth.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Opis
+      description: Co się stało?
+      placeholder: Aplikacja zawiesza się przy skanowaniu…
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Kroki reprodukcji
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Telefon / tablet
+      placeholder: Samsung A54, Android 14
+  - type: input
+    id: eho
+    attributes:
+      label: EHO-Mini (firmware / SN jeśli znane)
+  - type: textarea
+    id: expected
+    attributes:
+      label: Oczekiwane zachowanie
+    validations:
+      required: true
