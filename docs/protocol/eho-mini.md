@@ -170,8 +170,9 @@ Implementacja: `BluetoothDeviceFilter` (regex `^PRO_PLUS_ECG_\d{6}$`).
 Flow połączenia:
 
 1. Użytkownik paruje `PRO_PLUS_ECG_******` w ustawieniach Androida.
-2. Aplikacja czyta bonded devices i wybiera pasujące po nazwie.
-3. `createRfcommSocketToServiceRecord(SppConstants.SPP_UUID)` → framing Silvermedia.
+2. Aplikacja czyta bonded devices i wybiera pasujące po nazwie (`SppEhoMiniDeviceClient`).
+3. `createRfcommSocketToServiceRecord(SppConstants.SPP_UUID)` (fallback: insecure SPP) → framing Silvermedia.
+4. Reader loop + `FrameStreamParser` emituje przychodzące ramki; UI pokazuje m.in. PulseValue.
 
 ## Otwarte / do potwierdzenia na EHO-Mini
 

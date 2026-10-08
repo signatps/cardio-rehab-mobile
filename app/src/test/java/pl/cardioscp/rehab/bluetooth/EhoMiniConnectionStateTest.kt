@@ -8,10 +8,10 @@ class EhoMiniConnectionStateTest {
     @Test
     fun connected_holdsDeviceIdentity() {
         val state = EhoMiniConnectionState.Connected(
-            deviceName = "EHO-Mini",
+            deviceName = "PRO_PLUS_ECG_740579",
             address = "AA:BB:CC:DD:EE:FF",
         )
-        assertEquals("EHO-Mini", state.deviceName)
+        assertEquals("PRO_PLUS_ECG_740579", state.deviceName)
         assertEquals("AA:BB:CC:DD:EE:FF", state.address)
     }
 

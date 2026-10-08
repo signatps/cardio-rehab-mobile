@@ -1,5 +1,7 @@
 package pl.cardioscp.rehab.bluetooth
 
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import pl.cardioscp.rehab.bluetooth.protocol.ProtocolFrame
 
 /**
@@ -7,10 +9,11 @@ import pl.cardioscp.rehab.bluetooth.protocol.ProtocolFrame
  *
  * Pairing happens in Android Bluetooth settings. The app connects to a bonded
  * device matching [BluetoothDeviceFilter] via RFCOMM + [SppConstants.SPP_UUID].
- * Protocol codec + session logic: [pl.cardioscp.rehab.bluetooth.protocol].
  */
 interface EhoMiniDeviceClient {
-    /** List bonded devices matching [BluetoothDeviceFilter] (no active inquiry required). */
+    val connectionState: StateFlow<EhoMiniConnectionState>
+    val incomingFrames: SharedFlow<ProtocolFrame>
+
     suspend fun listBondedCandidates(): List<BondedEcgDevice>
     suspend fun connect(address: String)
     suspend fun disconnect()
@@ -23,11 +26,3 @@ data class BondedEcgDevice(
     val address: String,
     val serialSuffix: String,
 )
-
-class StubEhoMiniDeviceClient : EhoMiniDeviceClient {
-    override suspend fun listBondedCandidates(): List<BondedEcgDevice> = emptyList()
-    override suspend fun connect(address: String) = Unit
-    override suspend fun disconnect() = Unit
-    override suspend fun sendFrame(frame: ProtocolFrame) = Unit
-    override suspend fun sendRaw(payload: ByteArray) = Unit
-}

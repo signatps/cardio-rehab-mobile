@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -125,14 +126,14 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = stringResource(R.string.protocol_ready_hint),
+                    text = detailLabel(state),
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 )
                 Spacer(modifier = Modifier.height(24.dp))
 
-                when (state.connection) {
+                when (val connection = state.connection) {
                     is EhoMiniConnectionState.PermissionsRequired -> {
                         Text(
                             text = stringResource(R.string.permissions_rationale),
@@ -150,9 +151,56 @@ fun HomeScreen(
                         }
                     }
 
+                    is EhoMiniConnectionState.Connecting -> {
+                        Text(
+                            text = stringResource(R.string.connecting_to, connection.deviceName),
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+
+                    is EhoMiniConnectionState.Connected -> {
+                        Text(
+                            text = connection.deviceName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center,
+                            color = DeepTeal,
+                        )
+                        state.lastPulseBpm?.let { bpm ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = stringResource(R.string.pulse_bpm, bpm),
+                                style = MaterialTheme.typography.titleLarge,
+                                color = Seafoam,
+                            )
+                        }
+                        state.sessionLabel?.let { label ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = viewModel::onStartSessionClicked,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.start_session))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = viewModel::onDisconnectClicked,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.disconnect_device))
+                        }
+                    }
+
                     is EhoMiniConnectionState.Error -> {
                         Text(
-                            text = (state.connection as EhoMiniConnectionState.Error).message,
+                            text = connection.message,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.tertiary,
@@ -167,14 +215,31 @@ fun HomeScreen(
                         ) {
                             Text(stringResource(R.string.connect_device))
                         }
+                        TextButton(onClick = viewModel::refreshBondedDevices) {
+                            Text(stringResource(R.string.refresh_bonded))
+                        }
                     }
 
                     else -> {
+                        if (state.bondedDevices.isNotEmpty()) {
+                            Text(
+                                text = stringResource(
+                                    R.string.bonded_found,
+                                    state.bondedDevices.joinToString { it.name },
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center,
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
                         Button(
                             onClick = viewModel::onConnectClicked,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(stringResource(R.string.connect_device))
+                        }
+                        TextButton(onClick = viewModel::refreshBondedDevices) {
+                            Text(stringResource(R.string.refresh_bonded))
                         }
                     }
                 }
@@ -195,8 +260,20 @@ private fun statusLabel(state: EhoMiniConnectionState): String {
     return when (state) {
         EhoMiniConnectionState.Idle -> stringResource(R.string.device_status_idle)
         EhoMiniConnectionState.PermissionsRequired -> stringResource(R.string.permissions_needed)
-        EhoMiniConnectionState.Scanning -> stringResource(R.string.device_status_scanning)
+        EhoMiniConnectionState.LookingForBonded -> stringResource(R.string.device_status_scanning)
+        is EhoMiniConnectionState.Connecting -> stringResource(R.string.device_status_connecting)
         is EhoMiniConnectionState.Connected -> stringResource(R.string.device_status_connected)
-        is EhoMiniConnectionState.Error -> stringResource(R.string.device_status_idle)
+        is EhoMiniConnectionState.Error -> stringResource(R.string.device_status_error)
+    }
+}
+
+@Composable
+private fun detailLabel(state: HomeUiState): String {
+    return when (val connection = state.connection) {
+        is EhoMiniConnectionState.Connected ->
+            stringResource(R.string.connected_detail, connection.address)
+        is EhoMiniConnectionState.Connecting ->
+            stringResource(R.string.protocol_ready_hint)
+        else -> stringResource(R.string.protocol_ready_hint)
     }
 }
