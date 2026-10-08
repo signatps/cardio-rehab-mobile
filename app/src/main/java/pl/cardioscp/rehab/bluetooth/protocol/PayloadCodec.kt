@@ -5,6 +5,19 @@ import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 
 object PayloadCodec {
+    /**
+     * Init 0x04 payload.
+     *
+     * Pro-PLUS ECG firmware validates a fixed length and rejects the Silvermedia
+     * trailing "extra lead count" byte when it is `0` (live log:
+     * `COMMAND 4 … LENGTH IS NOT VALID` for msgLen=9).
+     *
+     * Default wire layout (8 bytes):
+     * `uint32 ts | uint16 samplingHz | uint8 pulseAvgSec | uint8 clearBuffer`
+     *
+     * When [extraLeads] is non-empty, append Silvermedia `count + leads`
+     * (`uint8 count | lead…`) for msgLen = 9 + leads.size.
+     */
     fun init(
         unixTimestampSeconds: Long,
         samplingHz: Int,
@@ -13,13 +26,19 @@ object PayloadCodec {
         extraLeads: ByteArray = ByteArray(0),
     ): ByteArray {
         require(extraLeads.size <= 255)
-        val buf = ByteBuffer.allocate(9 + extraLeads.size).order(ByteOrder.LITTLE_ENDIAN)
+        val baseSize = 8
+        val withLeads = extraLeads.isNotEmpty()
+        val buf = ByteBuffer
+            .allocate(baseSize + if (withLeads) 1 + extraLeads.size else 0)
+            .order(ByteOrder.LITTLE_ENDIAN)
         buf.putInt(unixTimestampSeconds.toInt())
         buf.putShort(samplingHz.toShort())
         buf.put(pulseAverageSeconds.toByte())
         buf.put(if (clearBuffer) 0x01 else 0x00)
-        buf.put(extraLeads.size.toByte())
-        buf.put(extraLeads)
+        if (withLeads) {
+            buf.put(extraLeads.size.toByte())
+            buf.put(extraLeads)
+        }
         return buf.array()
     }
 

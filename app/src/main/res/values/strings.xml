@@ -7,7 +7,8 @@
     <string name="home_subtitle">Domowa rehabilitacja kardiologiczna z EHO-Mini</string>
     <string name="connect_device">Połącz z PRO_PLUS_ECG</string>
     <string name="disconnect_device">Rozłącz</string>
-    <string name="start_session">Start sesji (Init / ECG / Pulse)</string>
+    <string name="scenario_pulse">Scenariusz 2: Puls</string>
+    <string name="scenario_ecg_offline">Scenariusz 3: ECG Offline</string>
     <string name="refresh_bonded">Odśwież listę sparowanych</string>
     <string name="device_status_idle">Urządzenie niepołączone</string>
     <string name="device_status_scanning">Szukam sparowanych PRO_PLUS_ECG_******…</string>
@@ -21,6 +22,6 @@
     <string name="permissions_needed">Wymagane uprawnienia Bluetooth</string>
     <string name="permissions_rationale">Aplikacja potrzebuje Bluetooth, aby otworzyć kanał SPP do rejestratora EKG.</string>
     <string name="grant_permissions">Udziel uprawnień</string>
-    <string name="session_placeholder">Po SPP: Start sesji wysyła Init, ECG Offline i Get Pulse wg protokołu.</string>
+    <string name="session_placeholder">Po SPP wybierz scenariusz 2 (puls) lub 3 (ECG Offline → SCP na urządzeniu).</string>
     <string name="protocol_ready_hint">Sparuj PRO_PLUS_ECG_****** w ustawieniach BT, potem Połącz.</string>
 </resources>

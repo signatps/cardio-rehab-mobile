@@ -7,15 +7,18 @@ Warstwa techniczna komunikacji Bluetooth z rejestratorem EKG (Plus / Pro-Plus / 
 ## Wejście
 
 1. Specyfikacja ramek → [`eho-mini.md`](eho-mini.md)
-2. Surowce → [`raw/`](raw/)
-3. Diagramy → [`diagrams/`](diagrams/)
+2. Scenariusze 2/3 → [`scenarios.md`](scenarios.md)
+3. Surowce → [`raw/`](raw/)
+4. Diagramy → [`diagrams/`](diagrams/)
 
 ## Kod
 
 `pl.cardioscp.rehab.bluetooth.protocol`:
 
 - `Crc16Ccitt`, `FrameCodec`, `FrameStreamParser`
-- typy / payloady komend
-- `OfflineSessionOrchestrator` — flow BPMN (Init, parallel ECG+Pulse, fragmenty SCP, End)
+- typy / payloady komend (`Init` domyślnie **8 B** — kompatybilność Pro-PLUS)
+- `PulseScenarioOrchestrator` — scenariusz 2
+- `EcgOfflineCreateOrchestrator` — scenariusz 3
+- `OfflineSessionOrchestrator` — BPMN z transferem SCP
 
 Transport BT: para w ustawieniach Androida → bonded + filtr `PRO_PLUS_ECG_`******; well-known SPP UUID. `ScpInfo` = 4 B.

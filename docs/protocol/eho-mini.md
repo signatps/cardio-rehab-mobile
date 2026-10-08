@@ -71,8 +71,12 @@ Minimalna ramka (pusty payload): 8 bajtów.
 | 4–5 | sampling Hz (`ushort`) |
 | 6 | okno średniej pulsu [s] |
 | 7 | clear buffer (`0x01` / `0x00`) |
-| 8 | liczba odprowadzeń dodatkowych |
-| 9… | kody odprowadzeń (SCP / EN 1064) |
+| 8… | *(opcjonalnie)* `count` + kody odprowadzeń dodatkowych |
+
+**Pro-PLUS ECG (live):** firmware odrzuca Init z `msgLen=9` (sam zerowy bajt `count`) —
+`DATA PACKET LENGTH IS NOT VALID. COMMAND 4`.  
+Dlatego domyślnie wysyłamy **8 bajtów** (bez pola count). Tablicę odprowadzeń doklejamy
+tylko gdy jest niepusta (`msgLen = 9 + n`).
 
 Init startuje ciągły zapis EKG+puls w pamięci urządzenia. Ponowny Init = nowy plik.
 

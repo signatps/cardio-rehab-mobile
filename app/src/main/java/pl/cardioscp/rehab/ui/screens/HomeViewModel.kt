@@ -86,12 +86,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             sessionController.status.collect { status ->
                 sessionLabel.value = when (status) {
                     ProtocolSessionController.Status.Idle -> null
-                    ProtocolSessionController.Status.Running -> "Sesja protokołu w toku…"
+                    is ProtocolSessionController.Status.Running -> when (status.scenario) {
+                        ProtocolSessionController.Scenario.PULSE -> "Scenariusz 2: puls…"
+                        ProtocolSessionController.Scenario.ECG_OFFLINE_CREATE ->
+                            "Scenariusz 3: ECG Offline…"
+                    }
                     is ProtocolSessionController.Status.Pulse -> "Puls: ${status.bpm} bpm"
-                    is ProtocolSessionController.Status.ScpSaved ->
-                        "Odebrano SCP (${status.bytes} B)"
+                    is ProtocolSessionController.Status.Info -> status.message
                     is ProtocolSessionController.Status.Failed -> "Sesja: ${status.reason}"
-                    ProtocolSessionController.Status.Finished -> "Sesja zakończona (End)"
+                    ProtocolSessionController.Status.Finished -> "Scenariusz zakończony"
                 }
                 if (status is ProtocolSessionController.Status.Pulse) {
                     lastPulseBpm.value = status.bpm
@@ -158,14 +161,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun onStartSessionClicked() {
+    fun onStartPulseScenario() {
+        if (deviceClient.connectionState.value !is EhoMiniConnectionState.Connected) return
+        sessionController.startPulseScenario()
+    }
+
+    fun onStartEcgOfflineScenario() {
         val connected = deviceClient.connectionState.value as? EhoMiniConnectionState.Connected
             ?: return
         val userId = bondedDevices.value
             .firstOrNull { it.address == connected.address }
             ?.serialSuffix
             ?: connected.deviceName.takeLast(6)
-        sessionController.startDefaultSession(userId = userId)
+        sessionController.startEcgOfflineCreateScenario(userId = userId)
     }
 
     fun clearError() {

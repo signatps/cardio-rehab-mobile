@@ -28,7 +28,27 @@ class FrameCodecTest {
     }
 
     @Test
-    fun encodeInitPayload() {
+    fun encodeInitPayload_defaultIsEightBytes() {
+        val payload = PayloadCodec.init(
+            unixTimestampSeconds = 0x6AC78A5D,
+            samplingHz = 500,
+            pulseAverageSeconds = 10,
+            clearBuffer = false,
+        )
+        assertEquals(8, payload.size)
+        val frame = ProtocolFrame(FrameType.INIT, 1, payload)
+        val bytes = FrameCodec.encode(frame)
+        // SOF + hdr + 8 payload + CRC = 16 (device rejected previous 17-byte / msgLen=9 form)
+        assertEquals(16, bytes.size)
+        assertEquals(8, bytes[4].toInt() and 0xFF)
+        assertEquals(0, bytes[5].toInt() and 0xFF)
+        val again = FrameCodec.decode(bytes)
+        assertNotNull(again)
+        assertTrue(payload.contentEquals(again!!.payload))
+    }
+
+    @Test
+    fun encodeInitPayload_withExtraLeads() {
         val payload = PayloadCodec.init(
             unixTimestampSeconds = 0x7FFFFFFF,
             samplingHz = 500,
@@ -36,9 +56,8 @@ class FrameCodecTest {
             clearBuffer = true,
             extraLeads = byteArrayOf(0x01, 0x02),
         )
-        val frame = ProtocolFrame(FrameType.INIT, 0x0101, payload)
-        val bytes = FrameCodec.encode(frame)
-        val again = FrameCodec.decode(bytes)
+        assertEquals(11, payload.size)
+        val again = FrameCodec.decode(FrameCodec.encode(ProtocolFrame(FrameType.INIT, 0x0101, payload)))
         assertNotNull(again)
         assertTrue(payload.contentEquals(again!!.payload))
     }

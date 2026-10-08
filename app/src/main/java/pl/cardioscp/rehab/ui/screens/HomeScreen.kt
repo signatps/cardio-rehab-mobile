@@ -184,10 +184,17 @@ fun HomeScreen(
                         }
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(
-                            onClick = viewModel::onStartSessionClicked,
+                            onClick = viewModel::onStartPulseScenario,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text(stringResource(R.string.start_session))
+                            Text(stringResource(R.string.scenario_pulse))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = viewModel::onStartEcgOfflineScenario,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.scenario_ecg_offline))
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(
