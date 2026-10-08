@@ -57,7 +57,7 @@ docs/protocol/       # mapa protokołu EHO-Mini (do wypełnienia)
 .github/ISSUE_TEMPLATE/
 ```
 
-Warstwa urządzenia: `app/src/main/java/pl/cardioscp/rehab/bluetooth/`.
+Warstwa urządzenia: `bluetooth/` (EHO-Mini SPP), `ble/` (ciśnienie/waga z mobile-DSD), `session/` (przepływ sesji rehabilitacji).
 
 ## Workflow
 
