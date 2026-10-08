@@ -8,11 +8,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,6 +41,8 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
+private val DayCellHeight = 34.dp
+
 @Composable
 fun SessionsCalendarScreen(
     clinic: ClinicSnapshot,
@@ -56,7 +58,7 @@ fun SessionsCalendarScreen(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text("Kalendarz sesji", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
         Row(
@@ -81,7 +83,7 @@ fun SessionsCalendarScreen(
                     it,
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = ProPlusColors.Muted,
                 )
             }
@@ -92,9 +94,12 @@ fun SessionsCalendarScreen(
         val days = month.lengthOfMonth()
         val cells = shift + days
         val rows = (cells + 6) / 7
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             repeat(rows) { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
                     repeat(7) { col ->
                         val index = row * 7 + col
                         val dayNum = index - shift + 1
@@ -105,8 +110,8 @@ fun SessionsCalendarScreen(
                             Box(
                                 Modifier
                                     .weight(1f)
-                                    .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .height(DayCellHeight)
+                                    .clip(RoundedCornerShape(6.dp))
                                     .background(
                                         when {
                                             isSelected -> ProPlusColors.Accent
@@ -120,25 +125,25 @@ fun SessionsCalendarScreen(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(
                                         "$dayNum",
+                                        style = MaterialTheme.typography.labelLarge,
                                         color = if (isSelected) ProPlusColors.Surface else ProPlusColors.Navy,
                                         fontWeight = if (has || isSelected) FontWeight.Bold else FontWeight.Normal,
                                     )
                                     if (has) {
                                         Box(
                                             Modifier
-                                                .padding(top = 2.dp)
-                                                .height(4.dp)
+                                                .padding(top = 1.dp)
+                                                .size(width = 10.dp, height = 3.dp)
                                                 .clip(CircleShape)
                                                 .background(
                                                     if (isSelected) ProPlusColors.Ice else ProPlusColors.Accent,
-                                                )
-                                                .fillMaxWidth(0.25f),
+                                                ),
                                         )
                                     }
                                 }
                             }
                         } else {
-                            Spacer(Modifier.weight(1f).aspectRatio(1f))
+                            Spacer(Modifier.weight(1f).height(DayCellHeight))
                         }
                     }
                 }

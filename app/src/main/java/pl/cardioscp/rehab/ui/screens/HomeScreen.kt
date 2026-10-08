@@ -30,7 +30,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import pl.cardioscp.rehab.R
 import pl.cardioscp.rehab.bluetooth.BluetoothPermissionHelper
 import pl.cardioscp.rehab.bluetooth.EhoMiniConnectionState
-import pl.cardioscp.rehab.ui.components.AnalogGauge
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 
 @Composable
@@ -117,18 +116,14 @@ fun HomeScreen(
                     textAlign = TextAlign.Center,
                     color = ProPlusColors.Navy,
                 )
-                AnalogGauge(
-                    value = state.lastPulseBpm?.toFloat(),
-                    minValue = 40f,
-                    maxValue = 160f,
-                    label = if (state.lastPulseBpm == null) {
-                        stringResource(R.string.pulse_waiting)
-                    } else {
-                        "Tętno EHO-Mini"
+                Text(
+                    text = when (val bpm = state.lastPulseBpm) {
+                        null -> stringResource(R.string.pulse_waiting)
+                        else -> stringResource(R.string.pulse_bpm, bpm)
                     },
-                    unit = "bpm",
-                    accent = ProPlusColors.Accent,
-                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = ProPlusColors.Accent,
+                    textAlign = TextAlign.Center,
                 )
                 if (state.pulseSampleCount > 0) {
                     Text(

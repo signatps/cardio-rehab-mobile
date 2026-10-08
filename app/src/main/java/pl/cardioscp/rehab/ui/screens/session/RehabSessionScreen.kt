@@ -202,15 +202,20 @@ fun RehabSessionScreen(
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Spacer(Modifier.height(8.dp))
-                    if (t.measuringPulse) {
+                    // Wskaźnik tylko w fazie wysiłku, gdy trwa pomiar tętna z EHO-Mini.
+                    if (t.phase.kind == TrainingPhaseKind.EXERCISE && t.measuringPulse) {
                         AnalogGauge(
-                            value = t.pulseBpm?.toFloat(),
+                            value = t.pulseBpm?.takeIf { it > 0 }?.toFloat(),
                             minValue = 40f,
                             maxValue = 180f,
-                            label = t.pulseBpm?.let { "Tętno $it bpm" } ?: "Tętno: oczekiwanie…",
+                            label = if (t.pulseBpm != null && t.pulseBpm > 0) {
+                                "Tętno z EKG"
+                            } else {
+                                "Oczekiwanie na tętno…"
+                            },
                             unit = "bpm",
                             accent = ProPlusColors.Accent,
-                            modifier = Modifier.fillMaxWidth(),
+                            diameter = 140.dp,
                         )
                         Spacer(Modifier.height(8.dp))
                     }

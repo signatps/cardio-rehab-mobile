@@ -24,7 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
 import pl.cardioscp.rehab.clinic.VitalKind
-import pl.cardioscp.rehab.ui.components.AnalogGauge
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -34,22 +33,10 @@ import java.util.Locale
 fun MeasurementsScreen(clinic: ClinicSnapshot) {
     var filter by remember { mutableStateOf<VitalKind?>(null) }
     val items = clinic.measurements.filter { filter == null || it.kind == filter }
-    val latestBpSys = clinic.measurements
-        .firstOrNull { it.kind == VitalKind.BLOOD_PRESSURE }
-        ?.valueText?.substringBefore("/")?.toFloatOrNull()
     val timeFmt = remember { SimpleDateFormat("d.MM.yyyy HH:mm", Locale("pl")) }
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Pomiary", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
-        AnalogGauge(
-            value = latestBpSys,
-            minValue = 80f,
-            maxValue = 200f,
-            label = "Ostatnie SYS",
-            unit = "mmHg",
-            accent = ProPlusColors.AccentBright,
-            modifier = Modifier.fillMaxWidth(),
-        )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text("Wszystkie") })
             VitalKind.entries.forEach { k ->

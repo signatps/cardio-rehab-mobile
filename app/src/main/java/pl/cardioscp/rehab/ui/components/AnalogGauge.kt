@@ -6,9 +6,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,16 +21,16 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Wskaźnik analogowy (półokrąg + wskazówka) — animacja przy zmianie wartości.
- * Zakres [minValue]..[maxValue], wartość bieżąca [value].
+ * Kompaktowy wskaźnik analogowy tętna (półokrąg + wskazówka).
+ * Tylko do podglądu BPM w trakcie wysiłku sesji rehab.
  */
 @Composable
 fun AnalogGauge(
@@ -41,6 +41,7 @@ fun AnalogGauge(
     unit: String,
     modifier: Modifier = Modifier,
     accent: Color = ProPlusColors.Accent,
+    diameter: Dp = 140.dp,
 ) {
     val fraction = remember { Animatable(0f) }
     val target = when {
@@ -50,26 +51,28 @@ fun AnalogGauge(
     LaunchedEffect(target) {
         fraction.animateTo(
             target,
-            animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+            animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing),
         )
     }
 
+    val gaugeHeight = diameter * 0.58f
+
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             Modifier
-                .fillMaxWidth()
-                .height(160.dp)
-                .padding(horizontal = 12.dp),
+                .width(diameter)
+                .height(gaugeHeight)
+                .padding(horizontal = 4.dp),
             contentAlignment = Alignment.BottomCenter,
         ) {
             Canvas(Modifier.matchParentSize()) {
-                val stroke = 14.dp.toPx()
-                val arcSize = Size(size.width - stroke, size.width - stroke)
-                val topLeft = Offset(stroke / 2f, size.height - arcSize.height / 2f - stroke)
-                // tło łuku
+                val stroke = 8.dp.toPx()
+                val arcW = size.width - stroke
+                val arcSize = Size(arcW, arcW)
+                val topLeft = Offset(stroke / 2f, size.height - arcSize.height / 2f - stroke / 2f)
                 drawArc(
                     color = ProPlusColors.Line,
                     startAngle = 180f,
@@ -79,7 +82,6 @@ fun AnalogGauge(
                     size = arcSize,
                     style = Stroke(width = stroke, cap = StrokeCap.Round),
                 )
-                // strefy: zielona / żółta / czerwona
                 drawArc(
                     color = ProPlusColors.ResultGood.copy(alpha = 0.55f),
                     startAngle = 180f,
@@ -107,7 +109,6 @@ fun AnalogGauge(
                     size = arcSize,
                     style = Stroke(width = stroke, cap = StrokeCap.Butt),
                 )
-                // aktywny łuk
                 drawArc(
                     color = accent,
                     startAngle = 180f,
@@ -115,9 +116,8 @@ fun AnalogGauge(
                     useCenter = false,
                     topLeft = topLeft,
                     size = arcSize,
-                    style = Stroke(width = stroke * 0.55f, cap = StrokeCap.Round),
+                    style = Stroke(width = stroke * 0.5f, cap = StrokeCap.Round),
                 )
-                // wskazówka
                 val cx = size.width / 2f
                 val cy = topLeft.y + arcSize.height / 2f
                 val angleDeg = 180f + 180f * fraction.value
@@ -131,31 +131,30 @@ fun AnalogGauge(
                     color = ProPlusColors.Navy,
                     start = Offset(cx, cy),
                     end = tip,
-                    strokeWidth = 4.dp.toPx(),
+                    strokeWidth = 2.5.dp.toPx(),
                     cap = StrokeCap.Round,
                 )
-                drawCircle(color = ProPlusColors.Navy, radius = 7.dp.toPx(), center = Offset(cx, cy))
-                drawCircle(color = Color.White, radius = 3.dp.toPx(), center = Offset(cx, cy))
-                // ticki
+                drawCircle(color = ProPlusColors.Navy, radius = 4.dp.toPx(), center = Offset(cx, cy))
+                drawCircle(color = Color.White, radius = 1.8.dp.toPx(), center = Offset(cx, cy))
                 for (i in 0..6) {
                     val a = Math.toRadians(180.0 + i * 30.0)
-                    val r0 = arcSize.width / 2f - stroke * 1.4f
-                    val r1 = arcSize.width / 2f - stroke * 0.85f
+                    val r0 = arcSize.width / 2f - stroke * 1.35f
+                    val r1 = arcSize.width / 2f - stroke * 0.8f
                     drawLine(
                         color = ProPlusColors.Muted,
                         start = Offset(cx + (cos(a) * r0).toFloat(), cy + (sin(a) * r0).toFloat()),
                         end = Offset(cx + (cos(a) * r1).toFloat(), cy + (sin(a) * r1).toFloat()),
-                        strokeWidth = 2.dp.toPx(),
+                        strokeWidth = 1.5.dp.toPx(),
                     )
                 }
             }
         }
         Text(
             text = value?.let { "${it.toInt()} $unit" } ?: "— $unit",
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.titleLarge,
             color = ProPlusColors.Navy,
             fontWeight = FontWeight.Bold,
         )
-        Text(label, style = MaterialTheme.typography.labelLarge, color = ProPlusColors.Muted)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = ProPlusColors.Muted)
     }
 }

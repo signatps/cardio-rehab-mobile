@@ -30,7 +30,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
 import pl.cardioscp.rehab.clinic.VitalKind
-import pl.cardioscp.rehab.ui.components.AnalogGauge
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import java.time.format.DateTimeFormatter
 
@@ -45,9 +44,9 @@ fun DashboardScreen(
 ) {
     val bp = clinic.measurements.firstOrNull { it.kind == VitalKind.BLOOD_PRESSURE }
     val weight = clinic.measurements.firstOrNull { it.kind == VitalKind.WEIGHT }
-    val pulse = livePulseBpm?.toFloat()
-        ?: clinic.measurements.firstOrNull { it.kind == VitalKind.PULSE }
-            ?.valueText?.filter { it.isDigit() }?.toFloatOrNull()
+    val pulseText = livePulseBpm?.let { "$it bpm" }
+        ?: clinic.measurements.firstOrNull { it.kind == VitalKind.PULSE }?.valueText
+        ?: "—"
     val pendingDoses = clinic.todayDoses.count { it.status.name == "PENDING" }
     val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -76,15 +75,6 @@ fun DashboardScreen(
             }
         }
 
-        AnalogGauge(
-            value = pulse,
-            minValue = 40f,
-            maxValue = 160f,
-            label = if (livePulseBpm != null) "Tętno na żywo (EHO-Mini)" else "Ostatnie tętno",
-            unit = "bpm",
-            accent = ProPlusColors.Accent,
-        )
-
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -99,6 +89,12 @@ fun DashboardScreen(
                 title = "Masa",
                 value = weight?.valueText ?: "—",
                 icon = Icons.Outlined.MonitorWeight,
+                modifier = Modifier.weight(1f),
+            )
+            VitalCard(
+                title = if (livePulseBpm != null) "Tętno na żywo" else "Tętno",
+                value = pulseText,
+                icon = Icons.Outlined.FavoriteBorder,
                 modifier = Modifier.weight(1f),
             )
         }
