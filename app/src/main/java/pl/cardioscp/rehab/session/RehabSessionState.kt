@@ -51,6 +51,8 @@ data class RehabSessionState(
     val surveyAnswers: Map<String, Boolean> = emptyMap(),
     val ecgEntries: List<SessionEcgEntry> = emptyList(),
     val training: TrainingLiveState? = null,
+    /** Podsumowanie tętna per cykl (po zakończeniu wysiłków). */
+    val cycleHrSummaries: List<CycleHrSummary> = emptyList(),
     val admissionRemainingSec: Int? = null,
     val busy: Boolean = false,
     val statusMessage: String? = null,

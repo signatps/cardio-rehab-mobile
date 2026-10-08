@@ -31,6 +31,8 @@ data class MedDose(
     val doseLabel: String,
     val time: LocalTime,
     val status: DoseStatus,
+    /** Kiedy oznaczono jako przyjęte (do oceny terminowości w planie dnia). */
+    val takenAtMs: Long? = null,
 )
 
 enum class DiseaseStatus { AKTUALNA, PRZEWLEKLA, HISTORYCZNA }
@@ -71,7 +73,23 @@ data class PlannedSession(
     val kind: PlannedSessionKind,
     val title: String,
     val status: PlannedSessionStatus,
+    /** Kiedy oznaczono sesję jako wykonaną. */
+    val completedAtMs: Long? = null,
 )
+
+enum class DayPlanKind { MED, SESSION, MEASUREMENT }
+
+/** Kolor tła pozycji planu — terminowość. */
+enum class DayPlanTone {
+    /** Jeszcze przed terminem, nie wykonane. */
+    UPCOMING,
+    /** Wykonane w terminie. */
+    ON_TIME,
+    /** Wykonane po terminie. */
+    LATE,
+    /** Nie wykonane i po terminie. */
+    MISSED,
+}
 
 data class DayPlanItem(
     val id: String,
@@ -79,6 +97,9 @@ data class DayPlanItem(
     val title: String,
     val detail: String,
     val done: Boolean = false,
+    val kind: DayPlanKind = DayPlanKind.MED,
+    val completedAtMs: Long? = null,
+    val tone: DayPlanTone = DayPlanTone.UPCOMING,
 )
 
 data class ClinicSnapshot(

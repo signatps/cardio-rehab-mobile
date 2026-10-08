@@ -19,6 +19,7 @@ import pl.cardioscp.rehab.CardioRehabApp
 import pl.cardioscp.rehab.clinic.ClinicDemoStore
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
 import pl.cardioscp.rehab.clinic.DiseaseStatus
+import pl.cardioscp.rehab.clinic.DoseStatus
 import pl.cardioscp.rehab.clinic.VitalKind
 import pl.cardioscp.rehab.clinic.WelcomePhrase
 import pl.cardioscp.rehab.host.MedReminderNotifier
@@ -248,8 +249,39 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun beginBaselineEcg() = rehabEngine.beginBaselineEcg()
     fun retryBpMeasure() = rehabEngine.startBpMeasure()
     fun retryWeightMeasure() = rehabEngine.startWeightMeasure()
+
+    /** Pomiar ciśnienia niezależny od sesji rehab (pulpit). */
+    fun measureBpStandalone() {
+        bleMeasure.startMeasure(
+            type = pl.cardioscp.rehab.ble.VitalMeasureType.BLOOD_PRESSURE,
+            onSaved = { reading, note ->
+                recordClinicMeasurement(
+                    VitalKind.BLOOD_PRESSURE,
+                    "Ciśnienie",
+                    reading.summary,
+                    note = note,
+                )
+            },
+        )
+    }
+
+    /** Pomiar wagi niezależny od sesji rehab (pulpit). */
+    fun measureWeightStandalone() {
+        bleMeasure.startMeasure(
+            type = pl.cardioscp.rehab.ble.VitalMeasureType.WEIGHT,
+            onSaved = { reading, note ->
+                recordClinicMeasurement(
+                    VitalKind.WEIGHT,
+                    "Masa",
+                    reading.summary,
+                    note = note,
+                )
+            },
+        )
+    }
+
     fun simulateBpMeasure() {
-        if (!bleMeasure.measurePopupOpen) rehabEngine.startBpMeasure()
+        if (!bleMeasure.measurePopupOpen) measureBpStandalone()
         bleMeasure.simulateMeasure()
         recordClinicMeasurement(
             VitalKind.BLOOD_PRESSURE,
@@ -259,7 +291,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
     fun simulateWeightMeasure() {
-        if (!bleMeasure.measurePopupOpen) rehabEngine.startWeightMeasure()
+        if (!bleMeasure.measurePopupOpen) measureWeightStandalone()
         bleMeasure.simulateMeasure()
         recordClinicMeasurement(
             VitalKind.WEIGHT,
@@ -267,6 +299,31 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             "78.2 kg",
             note = "symulacja",
         )
+    }
+
+    /** Liczba alertów na pulpit (dawki zaległe + ciśnienie poza WHO). */
+    fun dashboardAlertCount(): Int {
+        val now = java.time.LocalTime.now()
+        var n = clinicStore.snapshot().todayDoses.count {
+            it.status == DoseStatus.PENDING && !it.time.isAfter(now)
+        }
+        val bp = clinicStore.snapshot().measurements.firstOrNull { it.kind == VitalKind.BLOOD_PRESSURE }
+        val m = bp?.valueText?.let { Regex("""(\d+)\s*/\s*(\d+)""").find(it) }
+        if (m != null) {
+            val band = pl.cardioscp.rehab.ble.BpWho.band(
+                m.groupValues[1].toIntOrNull(),
+                m.groupValues[2].toIntOrNull(),
+            )
+            if (band == pl.cardioscp.rehab.ble.BpWho.Band.HIGH_NORMAL ||
+                band == pl.cardioscp.rehab.ble.BpWho.Band.GRADE1 ||
+                band == pl.cardioscp.rehab.ble.BpWho.Band.GRADE2 ||
+                band == pl.cardioscp.rehab.ble.BpWho.Band.GRADE3 ||
+                band == pl.cardioscp.rehab.ble.BpWho.Band.LOW
+            ) {
+                n++
+            }
+        }
+        return n
     }
 
     fun markDoseTaken(id: String) {
@@ -374,11 +431,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     pl.cardioscp.rehab.session.SurveyOutcome.DISQUALIFIED -> false
                     pl.cardioscp.rehab.session.SurveyOutcome.INCOMPLETE -> null
                 },
+                cycleHrSummaries = live.cycleHrSummaries,
             )
             refreshEcgArchive()
         }
         clinicStore.markTodayRehabSessionDone()
         _clinic.value = clinicStore.snapshot()
+    }
+
+    /** Najnowsza zarchiwizowana sesja z dziś — do kafelka na pulpicie. */
+    fun todayArchivedSession(): ArchivedRehabSession? {
+        val zone = java.time.ZoneId.systemDefault()
+        val start = java.time.LocalDate.now().atStartOfDay(zone).toInstant().toEpochMilli()
+        val end = java.time.LocalDate.now().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        return sessionArchive.latestForDay(start, end)
+            ?: _archivedSessions.value.firstOrNull {
+                val d = java.time.Instant.ofEpochMilli(it.startedAtMs).atZone(zone).toLocalDate()
+                d == java.time.LocalDate.now()
+            }
+            ?: _archivedSessions.value.firstOrNull()
     }
 
     private fun maybeNotifyDueMed() {

@@ -37,6 +37,54 @@ enum class HeartRateValueTone {
     WAITING,
 }
 
+/** Podsumowanie trzymania limitu tętna w jednym cyklu wysiłku. */
+enum class CycleHrZoneOutcome {
+    OK,
+    TOO_LOW,
+    TOO_HIGH,
+    UNKNOWN,
+}
+
+data class CycleHrSummary(
+    val cycle: Int,
+    val minBpm: Int,
+    val maxBpm: Int,
+    val outcome: CycleHrZoneOutcome,
+    val avgBpm: Int? = null,
+) {
+    companion object {
+        fun fromSamples(
+            cycle: Int,
+            limit: CycleHeartRateLimit?,
+            samples: List<Int>,
+        ): CycleHrSummary {
+            val min = limit?.minBpm ?: 0
+            val max = limit?.maxBpm ?: 0
+            val valid = samples.filter { it > 0 }
+            if (valid.isEmpty() || limit == null) {
+                return CycleHrSummary(cycle, min, max, CycleHrZoneOutcome.UNKNOWN, null)
+            }
+            val avg = valid.average().toInt()
+            var low = 0
+            var high = 0
+            var ok = 0
+            for (bpm in valid) {
+                when {
+                    bpm < min -> low++
+                    bpm > max -> high++
+                    else -> ok++
+                }
+            }
+            val outcome = when {
+                ok >= low && ok >= high -> CycleHrZoneOutcome.OK
+                low >= high -> CycleHrZoneOutcome.TOO_LOW
+                else -> CycleHrZoneOutcome.TOO_HIGH
+            }
+            return CycleHrSummary(cycle, min, max, outcome, avg)
+        }
+    }
+}
+
 object HeartRateCoach {
     /** Margines „blisko granicy” (bpm) wewnątrz strefy → żółty. */
     const val NEAR_EDGE_BPM = 5

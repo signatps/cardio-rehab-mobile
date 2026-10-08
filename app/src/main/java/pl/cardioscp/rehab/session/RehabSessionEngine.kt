@@ -289,9 +289,13 @@ class RehabSessionEngine(
         phase: TrainingPhase,
         limit: CycleHeartRateLimit?,
     ) {
+        val bpmSamples = mutableListOf<Int>()
         pulseWatchJob?.cancel()
         pulseWatchJob = scope.launch {
             sessionController.lastPulseBpm.collect { bpm ->
+                if (bpm != null && bpm > 0) {
+                    synchronized(bpmSamples) { bpmSamples += bpm }
+                }
                 update {
                     val t = it.training ?: return@update it
                     if (t.phase.index != phase.index) return@update it
@@ -324,6 +328,10 @@ class RehabSessionEngine(
             update {
                 val t = it.training ?: return@update it
                 val cue = HeartRateCoach.evaluate(t.pulseBpm, limit)
+                val bpm = t.pulseBpm
+                if (bpm != null && bpm > 0) {
+                    synchronized(bpmSamples) { bpmSamples += bpm }
+                }
                 it.copy(
                     training = t.copy(
                         phaseElapsedSec = elapsed,
@@ -345,6 +353,11 @@ class RehabSessionEngine(
         pulseWatchJob?.cancel()
         pulseWatchJob = null
         sessionController.stop()
+        val samples = synchronized(bpmSamples) { bpmSamples.toList() }
+        val summary = CycleHrSummary.fromSamples(phase.cycle, limit, samples)
+        update {
+            it.copy(cycleHrSummaries = it.cycleHrSummaries.filterNot { c -> c.cycle == phase.cycle } + summary)
+        }
         delay(200)
     }
 

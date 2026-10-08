@@ -21,7 +21,6 @@ class ClinicDemoStore(context: Context) {
     private var doses = defaultDoses()
     private var diseases = defaultDiseases()
     private var sessions = defaultSessions()
-    private var dayPlan = defaultDayPlan()
 
     init {
         loadPersisted()
@@ -35,7 +34,7 @@ class ClinicDemoStore(context: Context) {
         todayDoses = doses.sortedBy { it.time },
         diseases = diseases,
         sessions = sessions.sortedWith(compareBy({ it.date }, { it.time })),
-        dayPlan = dayPlan.sortedBy { it.time },
+        dayPlan = buildDayPlan(),
     )
 
     fun addMeasurement(
@@ -61,11 +60,9 @@ class ClinicDemoStore(context: Context) {
     }
 
     fun markDoseTaken(id: String) {
+        val now = System.currentTimeMillis()
         doses = doses.map {
-            if (it.id == id) it.copy(status = DoseStatus.TAKEN) else it
-        }
-        dayPlan = dayPlan.map {
-            if (it.id == "dose-$id") it.copy(done = true) else it
+            if (it.id == id) it.copy(status = DoseStatus.TAKEN, takenAtMs = now) else it
         }
         persist()
     }
@@ -91,7 +88,6 @@ class ClinicDemoStore(context: Context) {
         )
         medications = medications + med
         ensureTodayDoses()
-        syncMedsDayPlan()
         persist()
         return med
     }
@@ -100,7 +96,6 @@ class ClinicDemoStore(context: Context) {
         val removed = medications.firstOrNull { it.id == id } ?: return false
         medications = medications.filterNot { it.id == id }
         doses = doses.filterNot { it.drugName == removed.name }
-        syncMedsDayPlan()
         persist()
         return true
     }
@@ -144,18 +139,16 @@ class ClinicDemoStore(context: Context) {
     }
 
     fun markTodayRehabSessionDone() {
+        val now = System.currentTimeMillis()
         sessions = sessions.map {
             if (it.date == today &&
                 it.kind == PlannedSessionKind.REHAB_INTERVAL &&
                 it.status == PlannedSessionStatus.SCHEDULED
             ) {
-                it.copy(status = PlannedSessionStatus.DONE)
+                it.copy(status = PlannedSessionStatus.DONE, completedAtMs = now)
             } else {
                 it
             }
-        }
-        dayPlan = dayPlan.map {
-            if (it.id == "session") it.copy(done = true) else it
         }
         persist()
     }
@@ -229,23 +222,91 @@ class ClinicDemoStore(context: Context) {
         }
     }
 
-    private fun syncMedsDayPlan() {
-        val medItems = medications.flatMap { med ->
-            med.times.ifEmpty { parseTimes(med.scheduleNote) }.map { t ->
-                val time = runCatching { LocalTime.parse(normalizeTime(t)) }.getOrElse { LocalTime.of(8, 0) }
+    /**
+     * Plan dnia = leki + sesja rehab.
+     * Dodatkowe pomiary pacjenta (bez grupy sesji) dopisywane jako wykonane.
+     */
+    private fun buildDayPlan(): List<DayPlanItem> {
+        val nowTime = LocalTime.now()
+        val medItems = doses.map { dose ->
+            val done = dose.status == DoseStatus.TAKEN
+            DayPlanItem(
+                id = "dose-${dose.id}",
+                time = dose.time,
+                title = dose.drugName,
+                detail = dose.doseLabel,
+                done = done,
+                kind = DayPlanKind.MED,
+                completedAtMs = dose.takenAtMs,
+                tone = planTone(
+                    done = done,
+                    scheduled = dose.time,
+                    completedAtMs = dose.takenAtMs,
+                    nowTime = nowTime,
+                ),
+            )
+        }
+        val todaySession = sessions.firstOrNull {
+            it.date == today && it.kind == PlannedSessionKind.REHAB_INTERVAL
+        }
+        val sessionItem = todaySession?.let { s ->
+            val done = s.status == PlannedSessionStatus.DONE
+            DayPlanItem(
+                id = "session",
+                time = s.time,
+                title = "Sesja rehabilitacji",
+                detail = s.title,
+                done = done || s.status == PlannedSessionStatus.DISQUALIFIED,
+                kind = DayPlanKind.SESSION,
+                completedAtMs = s.completedAtMs,
+                tone = when (s.status) {
+                    PlannedSessionStatus.DISQUALIFIED -> DayPlanTone.MISSED
+                    PlannedSessionStatus.CANCELLED, PlannedSessionStatus.MISSED -> DayPlanTone.MISSED
+                    else -> planTone(
+                        done = done,
+                        scheduled = s.time,
+                        completedAtMs = s.completedAtMs,
+                        nowTime = nowTime,
+                    )
+                },
+            )
+        }
+        val dayStart = today.atStartOfDay(zone).toInstant().toEpochMilli()
+        val dayEnd = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val measureItems = measurements
+            .filter { it.sessionGroupId == null && it.measuredAtMs in dayStart until dayEnd }
+            .filter { it.kind == VitalKind.BLOOD_PRESSURE || it.kind == VitalKind.WEIGHT || it.kind == VitalKind.PULSE }
+            .map { m ->
+                val t = java.time.Instant.ofEpochMilli(m.measuredAtMs).atZone(zone).toLocalTime()
                 DayPlanItem(
-                    id = "dose-dose-${med.id}-$t",
-                    time = time,
-                    title = med.name,
-                    detail = med.doseLabel,
-                    done = doses.any {
-                        it.drugName == med.name && it.time == time && it.status == DoseStatus.TAKEN
-                    },
+                    id = "meas-${m.id}",
+                    time = t,
+                    title = m.label,
+                    detail = m.valueText,
+                    done = true,
+                    kind = DayPlanKind.MEASUREMENT,
+                    completedAtMs = m.measuredAtMs,
+                    tone = DayPlanTone.ON_TIME,
                 )
             }
+        return (medItems + listOfNotNull(sessionItem) + measureItems).sortedBy { it.time }
+    }
+
+    private fun planTone(
+        done: Boolean,
+        scheduled: LocalTime,
+        completedAtMs: Long?,
+        nowTime: LocalTime,
+    ): DayPlanTone {
+        val deadline = today.atTime(scheduled).atZone(zone).toInstant().toEpochMilli()
+        return when {
+            done -> {
+                val at = completedAtMs ?: deadline
+                if (at <= deadline) DayPlanTone.ON_TIME else DayPlanTone.LATE
+            }
+            nowTime.isAfter(scheduled) -> DayPlanTone.MISSED
+            else -> DayPlanTone.UPCOMING
         }
-        val nonMed = dayPlan.filter { !it.id.startsWith("dose-") }
-        dayPlan = (nonMed + medItems).sortedBy { it.time }
     }
 
     private fun persist() {
@@ -270,7 +331,8 @@ class ClinicDemoStore(context: Context) {
                         .put("drugName", d.drugName)
                         .put("doseLabel", d.doseLabel)
                         .put("time", d.time.toString())
-                        .put("status", d.status.name),
+                        .put("status", d.status.name)
+                        .put("takenAtMs", d.takenAtMs ?: JSONObject.NULL),
                 )
             }
         })
@@ -329,6 +391,7 @@ class ClinicDemoStore(context: Context) {
                                 doseLabel = o.getString("doseLabel"),
                                 time = LocalTime.parse(o.getString("time")),
                                 status = DoseStatus.valueOf(o.getString("status")),
+                                takenAtMs = o.optLong("takenAtMs").takeIf { o.has("takenAtMs") && !o.isNull("takenAtMs") && it > 0 },
                             ),
                         )
                     }
@@ -487,11 +550,6 @@ class ClinicDemoStore(context: Context) {
         }
         return base
     }
-
-    private fun defaultDayPlan() = listOf(
-        DayPlanItem("vitals", LocalTime.of(9, 0), "Pomiary", "Ciśnienie, waga", done = false),
-        DayPlanItem("session", LocalTime.of(10, 0), "Sesja rehabilitacji", "Trening sekwencyjny 2×15 s", done = false),
-    )
 
     companion object {
         private const val PREFS = "clinic_demo"

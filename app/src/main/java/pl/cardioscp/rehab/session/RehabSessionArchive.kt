@@ -29,6 +29,8 @@ data class ArchivedRehabSession(
     val weightSummary: String? = null,
     /** Wynik ankiety: true = pass, false = fail, null = brak. */
     val surveyPassed: Boolean? = null,
+    /** Limity tętna per cykl po treningu. */
+    val cycleHrSummaries: List<CycleHrSummary> = emptyList(),
 )
 
 /** Archiwum sesji rehab z listą zapisanych EKG (zakładka EKG). */
@@ -41,6 +43,11 @@ class RehabSessionArchive(
 
     fun list(): List<ArchivedRehabSession> = sessions.sortedByDescending { it.sessionNumber }
 
+    fun latestForDay(dayStartMs: Long, dayEndMs: Long): ArchivedRehabSession? =
+        sessions
+            .filter { it.startedAtMs in dayStartMs until dayEndMs }
+            .maxByOrNull { it.startedAtMs }
+
     fun resolveRecording(slot: ArchivedEcgSlot): ScpRecording? =
         recordingStore.list().firstOrNull { it.file.name == slot.fileName }
 
@@ -51,6 +58,7 @@ class RehabSessionArchive(
         bloodPressureSummary: String? = null,
         weightSummary: String? = null,
         surveyPassed: Boolean? = null,
+        cycleHrSummaries: List<CycleHrSummary> = emptyList(),
     ): ArchivedRehabSession? {
         if (entries.isEmpty()) return null
         val nextNum = (sessions.maxOfOrNull { it.sessionNumber } ?: 0) + 1
@@ -70,6 +78,7 @@ class RehabSessionArchive(
             bloodPressureSummary = bloodPressureSummary,
             weightSummary = weightSummary,
             surveyPassed = surveyPassed,
+            cycleHrSummaries = cycleHrSummaries.sortedBy { it.cycle },
         )
         sessions = sessions + archived
         persist()
@@ -107,12 +116,13 @@ class RehabSessionArchive(
                 bloodPressureSummary = "128/82 · 72/min",
                 weightSummary = "78.2 kg",
                 surveyPassed = true,
+                cycleHrSummaries = demoCycleHr(index),
             )
         }
         persist()
     }
 
-    /** Migracja etykiet + uzupełnienie vitals/ankiety, gdy stara sesja ich nie miała. */
+    /** Migracja etykiet + uzupełnienie vitals/ankiety/HR, gdy stara sesja ich nie miała. */
     private fun migrateLabelsAndSeedExtras() {
         if (sessions.isEmpty()) return
         var changed = false
@@ -130,17 +140,19 @@ class RehabSessionArchive(
             val needsExtras = s.bloodPressureSummary == null &&
                 s.weightSummary == null &&
                 s.surveyPassed == null
-            if (needsExtras) {
+            val needsHr = s.cycleHrSummaries.isEmpty()
+            if (needsExtras || needsHr || sessionChanged) {
                 changed = true
                 s.copy(
                     ecgs = newEcgs,
-                    bloodPressureSummary = "128/82 · 72/min",
-                    weightSummary = "78.2 kg",
-                    surveyPassed = true,
+                    bloodPressureSummary = s.bloodPressureSummary
+                        ?: if (needsExtras) "128/82 · 72/min" else null,
+                    weightSummary = s.weightSummary
+                        ?: if (needsExtras) "78.2 kg" else null,
+                    surveyPassed = s.surveyPassed
+                        ?: if (needsExtras) true else null,
+                    cycleHrSummaries = if (needsHr) demoCycleHr(s.sessionNumber) else s.cycleHrSummaries,
                 )
-            } else if (sessionChanged) {
-                changed = true
-                s.copy(ecgs = newEcgs)
             } else {
                 s
             }
@@ -163,6 +175,21 @@ class RehabSessionArchive(
                     .put("bloodPressureSummary", s.bloodPressureSummary)
                     .put("weightSummary", s.weightSummary)
                     .put("surveyPassed", s.surveyPassed)
+                    .put(
+                        "cycleHr",
+                        JSONArray().also { hrArr ->
+                            s.cycleHrSummaries.forEach { c ->
+                                hrArr.put(
+                                    JSONObject()
+                                        .put("cycle", c.cycle)
+                                        .put("minBpm", c.minBpm)
+                                        .put("maxBpm", c.maxBpm)
+                                        .put("outcome", c.outcome.name)
+                                        .put("avgBpm", c.avgBpm),
+                                )
+                            }
+                        },
+                    )
                     .put(
                         "ecgs",
                         JSONArray().also { eArr ->
@@ -207,6 +234,25 @@ class RehabSessionArchive(
                         !o.has("surveyPassed") || o.isNull("surveyPassed") -> null
                         else -> o.getBoolean("surveyPassed")
                     }
+                    val cycleHr = buildList {
+                        val hrArr = o.optJSONArray("cycleHr")
+                        if (hrArr != null) {
+                            for (j in 0 until hrArr.length()) {
+                                val h = hrArr.getJSONObject(j)
+                                add(
+                                    CycleHrSummary(
+                                        cycle = h.getInt("cycle"),
+                                        minBpm = h.optInt("minBpm"),
+                                        maxBpm = h.optInt("maxBpm"),
+                                        outcome = runCatching {
+                                            CycleHrZoneOutcome.valueOf(h.getString("outcome"))
+                                        }.getOrDefault(CycleHrZoneOutcome.UNKNOWN),
+                                        avgBpm = h.optInt("avgBpm").takeIf { h.has("avgBpm") && !h.isNull("avgBpm") && it > 0 },
+                                    ),
+                                )
+                            }
+                        }
+                    }
                     add(
                         ArchivedRehabSession(
                             id = o.getString("id"),
@@ -219,6 +265,7 @@ class RehabSessionArchive(
                             weightSummary = o.optString("weightSummary", null)
                                 ?.takeIf { it.isNotBlank() && it != "null" },
                             surveyPassed = surveyPassed,
+                            cycleHrSummaries = cycleHr,
                         ),
                     )
                 }
@@ -229,6 +276,11 @@ class RehabSessionArchive(
     companion object {
         private const val PREFS = "rehab_session_archive"
         private const val KEY = "sessions_v1"
+
+        private fun demoCycleHr(seed: Int): List<CycleHrSummary> = listOf(
+            CycleHrSummary(1, 80, 90, if (seed % 3 == 0) CycleHrZoneOutcome.TOO_LOW else CycleHrZoneOutcome.OK, 84),
+            CycleHrSummary(2, 85, 95, if (seed % 3 == 1) CycleHrZoneOutcome.TOO_HIGH else CycleHrZoneOutcome.OK, 91),
+        )
 
         /** Stare etykiety → kwalifikacja. */
         fun migrateEcgLabel(label: String): String = when {

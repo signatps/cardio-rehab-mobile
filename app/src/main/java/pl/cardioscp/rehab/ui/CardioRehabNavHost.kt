@@ -17,6 +17,7 @@ import pl.cardioscp.rehab.ui.screens.EcgViewerScreen
 import pl.cardioscp.rehab.ui.screens.HomeScreen
 import pl.cardioscp.rehab.ui.screens.HomeViewModel
 import pl.cardioscp.rehab.ui.screens.RecordingsScreen
+import pl.cardioscp.rehab.ui.ble.MeasurePopup
 import pl.cardioscp.rehab.ui.screens.clinic.DashboardScreen
 import pl.cardioscp.rehab.ui.screens.clinic.DayPlanScreen
 import pl.cardioscp.rehab.ui.screens.clinic.DiseasesScreen
@@ -81,15 +82,23 @@ fun CardioRehabNavHost(
                 patientName = clinic.patientName,
             ) {
                 when (current) {
-                    AppDestination.DASHBOARD -> DashboardScreen(
-                        clinic = clinic,
-                        livePulseBpm = state.lastPulseBpm,
-                        onOpenRehab = { destination = AppDestination.REHAB.name },
-                        onOpenDayPlan = { destination = AppDestination.DAY_PLAN.name },
-                        onOpenMeds = { destination = AppDestination.MEDS.name },
-                        onOpenMeasurements = { destination = AppDestination.MEASUREMENTS.name },
-                        onSpeakWelcome = viewModel::speakDayPlanWelcome,
-                    )
+                    AppDestination.DASHBOARD -> {
+                        DashboardScreen(
+                            clinic = clinic,
+                            livePulseBpm = state.lastPulseBpm,
+                            todaySession = viewModel.todayArchivedSession(),
+                            alertCount = viewModel.dashboardAlertCount(),
+                            onOpenRehab = { destination = AppDestination.REHAB.name },
+                            onOpenDayPlan = { destination = AppDestination.DAY_PLAN.name },
+                            onOpenMeds = { destination = AppDestination.MEDS.name },
+                            onOpenAlerts = { destination = AppDestination.MEDS.name },
+                            onOpenMeasurements = { destination = AppDestination.MEASUREMENTS.name },
+                            onMeasureBp = viewModel::measureBpStandalone,
+                            onMeasureWeight = viewModel::measureWeightStandalone,
+                            onSpeakWelcome = viewModel::speakDayPlanWelcome,
+                        )
+                        MeasurePopup(controller = viewModel.bleMeasure)
+                    }
                     AppDestination.SESSIONS -> SessionsCalendarScreen(
                         clinic = clinic,
                         onStartRehab = { destination = AppDestination.REHAB.name },
