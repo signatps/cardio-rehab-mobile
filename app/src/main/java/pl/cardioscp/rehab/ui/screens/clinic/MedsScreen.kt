@@ -15,6 +15,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -28,7 +32,9 @@ import java.time.format.DateTimeFormatter
 fun MedsScreen(
     clinic: ClinicSnapshot,
     onMarkTaken: (String) -> Unit,
+    onAddMedication: (name: String, dose: String, times: List<String>, note: String) -> Unit = { _, _, _, _ -> },
 ) {
+    var addOpen by remember { mutableStateOf(false) }
     val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
     Column(
         Modifier
@@ -36,7 +42,14 @@ fun MedsScreen(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Leki", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Leki", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
+            Button(onClick = { addOpen = true }) { Text("Dodaj lek") }
+        }
         Text("Dawki na dziś", style = MaterialTheme.typography.titleLarge, color = ProPlusColors.Navy)
         clinic.todayDoses.forEach { dose ->
             Surface(
@@ -89,5 +102,14 @@ fun MedsScreen(
                 }
             }
         }
+    }
+    if (addOpen) {
+        MedAddDialog(
+            onDismiss = { addOpen = false },
+            onSave = { name, dose, times, note ->
+                onAddMedication(name, dose, times, note)
+                addOpen = false
+            },
+        )
     }
 }

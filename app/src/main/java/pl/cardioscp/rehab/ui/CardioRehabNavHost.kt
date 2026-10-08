@@ -12,6 +12,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import pl.cardioscp.rehab.ui.screens.BrandSplashScreen
+import pl.cardioscp.rehab.ui.screens.EcgBrowserScreen
 import pl.cardioscp.rehab.ui.screens.EcgViewerScreen
 import pl.cardioscp.rehab.ui.screens.HomeScreen
 import pl.cardioscp.rehab.ui.screens.HomeViewModel
@@ -72,13 +73,10 @@ fun CardioRehabNavHost(
             AppShell(
                 destination = current,
                 onDestination = { dest ->
-                    when (dest) {
-                        AppDestination.ECG -> {
-                            viewModel.refreshRecordings()
-                            navController.navigate(Routes.RECORDINGS)
-                        }
-                        else -> destination = dest.name
+                    if (dest == AppDestination.ECG) {
+                        viewModel.refreshEcgArchive()
                     }
+                    destination = dest.name
                 },
                 patientName = clinic.patientName,
             ) {
@@ -101,26 +99,30 @@ fun CardioRehabNavHost(
                     AppDestination.MEDS -> MedsScreen(
                         clinic = clinic,
                         onMarkTaken = viewModel::markDoseTaken,
+                        onAddMedication = viewModel::addMedication,
                     )
-                    AppDestination.DISEASES -> DiseasesScreen(clinic = clinic)
+                    AppDestination.DISEASES -> DiseasesScreen(
+                        clinic = clinic,
+                        onAddDisease = viewModel::addDisease,
+                        onSetStatus = viewModel::setDiseaseStatus,
+                        onRemove = viewModel::removeDisease,
+                    )
                     AppDestination.REHAB -> RehabSessionScreen(
                         viewModel = viewModel,
                         onBack = { destination = AppDestination.DASHBOARD.name },
                         onOpenEcg = {
-                            navController.navigate(Routes.ECG_VIEWER) {
-                                launchSingleTop = true
-                            }
+                            destination = AppDestination.ECG.name
                         },
                     )
                     AppDestination.DEVICE -> HomeScreen(
                         viewModel = viewModel,
                         onOpenRecordings = {
-                            viewModel.refreshRecordings()
-                            navController.navigate(Routes.RECORDINGS)
+                            viewModel.refreshEcgArchive()
+                            destination = AppDestination.ECG.name
                         },
                         onOpenRehabSession = { destination = AppDestination.REHAB.name },
                     )
-                    AppDestination.ECG -> Unit
+                    AppDestination.ECG -> EcgBrowserScreen(viewModel = viewModel)
                 }
             }
         }

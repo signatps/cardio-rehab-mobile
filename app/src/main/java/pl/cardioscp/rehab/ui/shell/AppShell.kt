@@ -180,8 +180,7 @@ private fun PhoneBar(
             NavigationBarItem(
                 selected = destination == dest ||
                     (destination == AppDestination.DAY_PLAN && dest == AppDestination.SESSIONS) ||
-                    (destination == AppDestination.DISEASES && dest == AppDestination.MEDS) ||
-                    (destination == AppDestination.ECG && dest == AppDestination.REHAB),
+                    (destination == AppDestination.DISEASES && dest == AppDestination.MEDS),
                 onClick = { onDestination(dest) },
                 icon = { Icon(dest.icon, contentDescription = dest.phoneLabel) },
                 label = {

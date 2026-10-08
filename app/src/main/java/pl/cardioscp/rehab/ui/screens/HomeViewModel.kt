@@ -18,12 +18,18 @@ import pl.cardioscp.rehab.bluetooth.SppEhoMiniDeviceClient
 import pl.cardioscp.rehab.CardioRehabApp
 import pl.cardioscp.rehab.clinic.ClinicDemoStore
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
+import pl.cardioscp.rehab.clinic.DiseaseStatus
 import pl.cardioscp.rehab.clinic.VitalKind
 import pl.cardioscp.rehab.clinic.WelcomePhrase
+import pl.cardioscp.rehab.host.MedReminderNotifier
+import pl.cardioscp.rehab.host.MedReminderScheduler
 import pl.cardioscp.rehab.scp.ScpEcgParser
 import pl.cardioscp.rehab.scp.ScpEcgRecording
 import pl.cardioscp.rehab.scp.ScpRecording
 import pl.cardioscp.rehab.scp.ScpRecordingStore
+import pl.cardioscp.rehab.session.ArchivedEcgSlot
+import pl.cardioscp.rehab.session.ArchivedRehabSession
+import pl.cardioscp.rehab.session.RehabSessionArchive
 import pl.cardioscp.rehab.session.RehabSessionEngine
 import pl.cardioscp.rehab.session.RehabSessionState
 import pl.cardioscp.rehab.session.SessionEcgEntry
@@ -46,9 +52,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val recordingStore = ScpRecordingStore(application)
     val bleMeasure = BleMeasureController(application)
 
-    private val clinicStore = ClinicDemoStore()
+    private val clinicStore = ClinicDemoStore(application)
     private val _clinic = MutableStateFlow(clinicStore.snapshot())
     val clinic: StateFlow<ClinicSnapshot> = _clinic
+
+    private val sessionArchive = RehabSessionArchive(application, recordingStore)
+    private val _archivedSessions = MutableStateFlow<List<ArchivedRehabSession>>(emptyList())
+    val archivedSessions: StateFlow<List<ArchivedRehabSession>> = _archivedSessions
 
     private var dayPlanWelcomeSpoken = false
     private val voiceGreeting
@@ -206,6 +216,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         refreshPermissions()
+        refreshEcgArchive()
+        MedReminderScheduler.reschedule(application, clinicStore)
     }
 
     fun startRehabSession(includeWeight: Boolean = true) {
@@ -250,6 +262,35 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun markDoseTaken(id: String) {
         clinicStore.markDoseTaken(id)
         _clinic.value = clinicStore.snapshot()
+        MedReminderScheduler.reschedule(getApplication(), clinicStore)
+    }
+
+    fun addMedication(name: String, dose: String, times: List<String>, note: String) {
+        clinicStore.addMedication(name, dose, times, note)
+        _clinic.value = clinicStore.snapshot()
+        MedReminderScheduler.reschedule(getApplication(), clinicStore)
+        maybeNotifyDueMed()
+    }
+
+    fun addDisease(
+        name: String,
+        icd: String,
+        status: DiseaseStatus,
+        diagnosed: String,
+        note: String,
+    ) {
+        clinicStore.addDisease(name, icd, status, diagnosed, note)
+        _clinic.value = clinicStore.snapshot()
+    }
+
+    fun setDiseaseStatus(id: String, status: DiseaseStatus) {
+        clinicStore.updateDiseaseStatus(id, status)
+        _clinic.value = clinicStore.snapshot()
+    }
+
+    fun removeDisease(id: String) {
+        clinicStore.removeDisease(id)
+        _clinic.value = clinicStore.snapshot()
     }
 
     fun recordClinicMeasurement(
@@ -264,6 +305,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshClinic() {
         _clinic.value = clinicStore.snapshot()
+    }
+
+    fun refreshEcgArchive() {
+        sessionArchive.ensureSeedFromRecordings()
+        _archivedSessions.value = sessionArchive.list()
+    }
+
+    fun sessionArchiveDateLabel(session: ArchivedRehabSession): String =
+        sessionArchive.sessionDateLabel(session)
+
+    fun openArchivedEcg(session: ArchivedRehabSession, slot: ArchivedEcgSlot) {
+        _viewerTitle.value = "Sesja ${session.sessionNumber} · ${slot.label}"
+        val rec = sessionArchive.resolveRecording(slot)
+        if (rec == null) {
+            _viewerRecording.value = null
+            _viewerError.value = "Brak pliku SCP: ${slot.fileName}"
+            return
+        }
+        openRecording(rec)
     }
 
     /** Podgrzewa TTS (np. na splashu). */
@@ -283,10 +343,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         voiceGreeting?.speak(phrase)
     }
 
-    /** Po zakończonej sesji rehab — kolejne powitanie nie przypomina o treningu. */
+    /** Po zakończonej sesji rehab — archiwum EKG + plan dnia bez sesji. */
     fun markTodayRehabSessionDone() {
+        val live = rehabEngine.state.value
+        if (live != null && live.ecgEntries.isNotEmpty()) {
+            sessionArchive.archiveFromLiveSession(
+                entries = live.ecgEntries,
+                startedAtMs = live.startedAtMs,
+            )
+            refreshEcgArchive()
+        }
         clinicStore.markTodayRehabSessionDone()
         _clinic.value = clinicStore.snapshot()
+    }
+
+    private fun maybeNotifyDueMed() {
+        val app = getApplication<Application>()
+        if (!MedReminderNotifier.canPost(app)) return
+        clinicStore.dueMedicationReminderPayload()?.let { (title, body) ->
+            MedReminderNotifier.notifyMedicationReminder(app, title, body)
+        }
     }
     fun skipWeight() = rehabEngine.skipWeight()
     fun answerSurvey(questionId: String, yes: Boolean) = rehabEngine.answerSurvey(questionId, yes)

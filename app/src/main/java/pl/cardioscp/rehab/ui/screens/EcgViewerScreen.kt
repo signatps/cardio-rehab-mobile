@@ -63,6 +63,7 @@ import pl.cardioscp.rehab.ui.ecg.AveragePqrPanel
 import pl.cardioscp.rehab.ui.ecg.EcgPaper
 import pl.cardioscp.rehab.ui.ecg.EcgUiColors
 import pl.cardioscp.rehab.ui.theme.DeepTeal
+import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import pl.cardioscp.rehab.ui.theme.Sand
 
 @Composable
@@ -71,6 +72,8 @@ fun EcgViewerScreen(
     recording: ScpEcgRecording?,
     error: String?,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    showChrome: Boolean = true,
 ) {
     val wide = LocalConfiguration.current.screenWidthDp >= 840
     var mmPerSec by remember { mutableIntStateOf(25) }
@@ -82,30 +85,44 @@ fun EcgViewerScreen(
     var analysisLead by remember { mutableStateOf(Lead.II) }
 
     Column(
-        Modifier
+        modifier
             .fillMaxSize()
-            .background(Sand)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .background(if (showChrome) Sand else ProPlusColors.Surface)
+            .padding(horizontal = if (showChrome) 8.dp else 4.dp, vertical = 4.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Wróć")
-            }
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = DeepTeal)
-                if (recording != null) {
-                    Text(
-                        String.format(
-                            "%.1f s · %d Hz · AVM %d nV/LSB · SCP",
-                            recording.durationSeconds,
-                            recording.samplingHz,
-                            recording.avm,
-                        ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = EcgUiColors.Muted,
-                    )
+        if (showChrome) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Wróć")
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium, color = DeepTeal)
+                    if (recording != null) {
+                        Text(
+                            String.format(
+                                "%.1f s · %d Hz · AVM %d nV/LSB · SCP",
+                                recording.durationSeconds,
+                                recording.samplingHz,
+                                recording.avm,
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = EcgUiColors.Muted,
+                        )
+                    }
                 }
             }
+        } else if (recording != null) {
+            Text(
+                String.format(
+                    "%s · %.1f s · %d Hz",
+                    title,
+                    recording.durationSeconds,
+                    recording.samplingHz,
+                ),
+                style = MaterialTheme.typography.labelLarge,
+                color = DeepTeal,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
         }
 
         when {

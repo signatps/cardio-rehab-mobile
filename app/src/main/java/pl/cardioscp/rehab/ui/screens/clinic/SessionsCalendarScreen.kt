@@ -29,10 +29,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
+import pl.cardioscp.rehab.clinic.PlannedSession
+import pl.cardioscp.rehab.clinic.PlannedSessionKind
 import pl.cardioscp.rehab.clinic.PlannedSessionStatus
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import java.time.LocalDate
@@ -42,6 +45,10 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 private val DayCellHeight = 34.dp
+private val DayGray = Color(0xFFE5E7EA)
+private val DayGreen = Color(0xFFD1E7DD)
+private val DayRed = Color(0xFFF8D7DA)
+private val DayScheduled = Color(0xFFDAF1FF)
 
 @Composable
 fun SessionsCalendarScreen(
@@ -52,7 +59,9 @@ fun SessionsCalendarScreen(
     var selected by remember { mutableStateOf(LocalDate.now()) }
     val locale = Locale("pl")
     val daySessions = clinic.sessions.filter { it.date == selected }
-    val daysWithSessions = clinic.sessions.map { it.date }.toSet()
+    val sessionsByDay = remember(clinic.sessions) {
+        clinic.sessions.groupBy { it.date }
+    }
 
     Column(
         Modifier
@@ -105,20 +114,15 @@ fun SessionsCalendarScreen(
                         val dayNum = index - shift + 1
                         if (dayNum in 1..days) {
                             val date = month.atDay(dayNum)
-                            val has = date in daysWithSessions
+                            val dayList = sessionsByDay[date].orEmpty()
+                            val tone = dayTone(dayList)
                             val isSelected = date == selected
                             Box(
                                 Modifier
                                     .weight(1f)
                                     .height(DayCellHeight)
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(
-                                        when {
-                                            isSelected -> ProPlusColors.Accent
-                                            has -> ProPlusColors.Mist
-                                            else -> ProPlusColors.Bg
-                                        },
-                                    )
+                                    .background(if (isSelected) ProPlusColors.Accent else tone.background)
                                     .clickable { selected = date },
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -126,17 +130,21 @@ fun SessionsCalendarScreen(
                                     Text(
                                         "$dayNum",
                                         style = MaterialTheme.typography.labelLarge,
-                                        color = if (isSelected) ProPlusColors.Surface else ProPlusColors.Navy,
-                                        fontWeight = if (has || isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) ProPlusColors.Surface else tone.foreground,
+                                        fontWeight = if (tone != DayTone.EMPTY || isSelected) {
+                                            FontWeight.Bold
+                                        } else {
+                                            FontWeight.Normal
+                                        },
                                     )
-                                    if (has) {
+                                    if (tone != DayTone.EMPTY) {
                                         Box(
                                             Modifier
                                                 .padding(top = 1.dp)
                                                 .size(width = 10.dp, height = 3.dp)
                                                 .clip(CircleShape)
                                                 .background(
-                                                    if (isSelected) ProPlusColors.Ice else ProPlusColors.Accent,
+                                                    if (isSelected) ProPlusColors.Ice else tone.mark,
                                                 ),
                                         )
                                     }
@@ -150,13 +158,23 @@ fun SessionsCalendarScreen(
             }
         }
 
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            LegendDot(DayGreen, "Wykonana")
+            LegendDot(DayRed, "Brak dopuszczenia / anulowana")
+            LegendDot(DayGray, "Bez ćwiczeń")
+            LegendDot(DayScheduled, "Zaplanowana")
+        }
+
         Text(
             "Sesje · ${selected.format(DateTimeFormatter.ofPattern("d MMMM yyyy", locale))}",
             style = MaterialTheme.typography.titleLarge,
             color = ProPlusColors.Navy,
         )
         if (daySessions.isEmpty()) {
-            Text("Brak zaplanowanych sesji tego dnia.", color = ProPlusColors.Muted)
+            Text("Brak zaplanowanych ćwiczeń tego dnia.", color = ProPlusColors.Muted)
         } else {
             daySessions.forEach { s ->
                 Surface(
@@ -178,16 +196,14 @@ fun SessionsCalendarScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            when (s.status) {
-                                PlannedSessionStatus.SCHEDULED -> "Zaplanowana"
-                                PlannedSessionStatus.DONE -> "Wykonana"
-                                PlannedSessionStatus.MISSED -> "Pominięta"
-                                PlannedSessionStatus.CANCELLED -> "Anulowana"
-                            },
+                            statusLabel(s.status),
                             style = MaterialTheme.typography.bodyMedium,
                             color = when (s.status) {
                                 PlannedSessionStatus.DONE -> ProPlusColors.ResultGood
-                                PlannedSessionStatus.MISSED -> ProPlusColors.Danger
+                                PlannedSessionStatus.DISQUALIFIED,
+                                PlannedSessionStatus.MISSED,
+                                PlannedSessionStatus.CANCELLED,
+                                -> ProPlusColors.Danger
                                 else -> ProPlusColors.Muted
                             },
                         )
@@ -195,5 +211,55 @@ fun SessionsCalendarScreen(
                 }
             }
         }
+    }
+}
+
+private enum class DayTone(
+    val background: Color,
+    val foreground: Color,
+    val mark: Color,
+) {
+    EMPTY(DayGray, ProPlusColors.Muted, ProPlusColors.Muted),
+    DONE(DayGreen, ProPlusColors.ResultGood, ProPlusColors.ResultGood),
+    BAD(DayRed, ProPlusColors.Danger, ProPlusColors.Danger),
+    SCHEDULED(DayScheduled, ProPlusColors.Navy, ProPlusColors.Accent),
+}
+
+/** Priorytet: problem (czerwony) > wykonana (zielony) > zaplanowana > szary. */
+private fun dayTone(daySessions: List<PlannedSession>): DayTone {
+    val rehab = daySessions.filter { it.kind == PlannedSessionKind.REHAB_INTERVAL }
+    val relevant = rehab.ifEmpty { daySessions }
+    if (relevant.isEmpty()) return DayTone.EMPTY
+    if (relevant.any {
+            it.status == PlannedSessionStatus.DISQUALIFIED ||
+                it.status == PlannedSessionStatus.CANCELLED ||
+                it.status == PlannedSessionStatus.MISSED
+        }
+    ) {
+        return DayTone.BAD
+    }
+    if (relevant.any { it.status == PlannedSessionStatus.DONE }) return DayTone.DONE
+    if (relevant.any { it.status == PlannedSessionStatus.SCHEDULED }) return DayTone.SCHEDULED
+    return DayTone.EMPTY
+}
+
+private fun statusLabel(status: PlannedSessionStatus): String = when (status) {
+    PlannedSessionStatus.SCHEDULED -> "Zaplanowana"
+    PlannedSessionStatus.DONE -> "Wykonana"
+    PlannedSessionStatus.DISQUALIFIED -> "Brak dopuszczenia"
+    PlannedSessionStatus.MISSED -> "Pominięta"
+    PlannedSessionStatus.CANCELLED -> "Anulowana"
+}
+
+@Composable
+private fun LegendDot(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = ProPlusColors.Muted)
     }
 }

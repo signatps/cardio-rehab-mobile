@@ -33,14 +33,7 @@ data class MedDose(
     val status: DoseStatus,
 )
 
-data class Medication(
-    val id: String,
-    val name: String,
-    val doseLabel: String,
-    val scheduleNote: String,
-)
-
-enum class DiseaseStatus { AKTUALNA, HISTORYCZNA }
+enum class DiseaseStatus { AKTUALNA, PRZEWLEKLA, HISTORYCZNA }
 
 data class Disease(
     val id: String,
@@ -48,11 +41,28 @@ data class Disease(
     val icd: String = "",
     val status: DiseaseStatus,
     val diagnosedLabel: String,
+    val note: String = "",
+)
+
+data class Medication(
+    val id: String,
+    val name: String,
+    val doseLabel: String,
+    val scheduleNote: String,
+    /** Godziny HH:mm, np. 08:00, 20:00. */
+    val times: List<String> = emptyList(),
 )
 
 enum class PlannedSessionKind { REHAB_INTERVAL, ECG_CHECK, CONSULT }
 
-enum class PlannedSessionStatus { SCHEDULED, DONE, MISSED, CANCELLED }
+enum class PlannedSessionStatus {
+    SCHEDULED,
+    DONE,
+    /** Brak dopuszczenia (ankieta / kwalifikacja). */
+    DISQUALIFIED,
+    MISSED,
+    CANCELLED,
+}
 
 data class PlannedSession(
     val id: String,
