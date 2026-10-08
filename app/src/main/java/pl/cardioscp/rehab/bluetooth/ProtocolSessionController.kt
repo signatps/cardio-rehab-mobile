@@ -1,6 +1,8 @@
 package pl.cardioscp.rehab.bluetooth
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -8,6 +10,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import pl.cardioscp.rehab.bluetooth.protocol.CommandFactory
 import pl.cardioscp.rehab.bluetooth.protocol.EcgOfflineCreateOrchestrator
@@ -23,8 +29,8 @@ import pl.cardioscp.rehab.bluetooth.protocol.SequenceGenerator
  * Runs documented SPP scenarios over a live [EhoMiniDeviceClient] link.
  * Shares one [SequenceGenerator] for the lifetime of the BT session.
  *
- * Pulse BPM is published on [lastPulseBpm] / [pulseSampleCount] separately from
- * [status], so rapid Info updates cannot conflate away Pulse values in a StateFlow.
+ * Prefer suspend helpers [runEcgOfflineCreate], [runScpDownload], [runPulseFor]
+ * from the rehab session — they wait for real Finished/Failed (no StateFlow race).
  */
 class ProtocolSessionController(
     private val client: EhoMiniDeviceClient,
@@ -57,111 +63,156 @@ class ProtocolSessionController(
 
     private val sequences = SequenceGenerator()
     private val commands = CommandFactory(sequences)
+    private val scenarioMutex = Mutex()
 
     private var pulseOrch: PulseScenarioOrchestrator? = null
     private var ecgOrch: EcgOfflineCreateOrchestrator? = null
     private var scpOrch: ScpDownloadOrchestrator? = null
     private var collectJob: Job? = null
+    private var activeOutcome: CompletableDeferred<Status>? = null
 
     fun startPulseScenario() {
         scope.launch {
-            prepareDevice()
-            _lastPulseBpm.value = null
-            _pulseSampleCount.value = 0
-            _electrodeWarning.value = null
-            val orch = PulseScenarioOrchestrator(
-                commands = commands,
-                // Keep streaming long enough for avg window (Init pulseAverageSeconds=10).
-                autoStopAfterPulses = 20,
-            )
-            pulseOrch = orch
-            ecgOrch = null
-            scpOrch = null
-            _status.value = Status.Running(Scenario.PULSE)
-            collectJob?.cancel()
-            collectJob = scope.launch {
-                client.incomingFrames.collect { frame ->
-                    noteDeviceAlerts(frame)
-                    if (frame.type == FrameType.PULSE_VALUE && frame.payload.isNotEmpty()) {
-                        publishPulse(PayloadCodec.parsePulseValue(frame.payload))
-                    }
-                    dispatch(orch.onFrame(frame))
-                }
-            }
-            dispatch(
-                orch.start(
-                    PulseScenarioOrchestrator.Config(
-                        unixTimestampSeconds = System.currentTimeMillis() / 1000L,
-                        samplingHz = 250,
-                        pulseAverageSeconds = 10,
-                        pulseIntervalTenths = 10,
-                    ),
-                ),
-            )
+            runCatching { runPulseFor(durationSec = 25) }
         }
     }
 
     fun startEcgOfflineCreateScenario(userId: String, totalSeconds: Int = 10) {
         scope.launch {
-            prepareDevice()
-            val orch = EcgOfflineCreateOrchestrator(commands = commands)
-            ecgOrch = orch
-            pulseOrch = null
-            scpOrch = null
-            _status.value = Status.Running(Scenario.ECG_OFFLINE_CREATE)
-            collectJob?.cancel()
-            collectJob = scope.launch {
-                client.incomingFrames.collect { frame ->
-                    noteDeviceAlerts(frame)
-                    dispatch(orch.onFrame(frame))
-                }
-            }
-            // lookback=0: buffer may be empty right after Init (firmware rng_msgs >= back).
-            // total > lookback required. Offline Done after ~total seconds.
-            dispatch(
-                orch.start(
-                    EcgOfflineCreateOrchestrator.Config(
-                        unixTimestampSeconds = System.currentTimeMillis() / 1000L,
-                        samplingHz = 250,
-                        pulseAverageSeconds = 10,
-                        lookbackSeconds = 0,
-                        totalSeconds = totalSeconds.coerceAtLeast(2),
-                        userId = userId,
-                        reinitAfterEnd = false,
-                    ),
-                ),
-            )
+            runCatching { runEcgOfflineCreate(userId, totalSeconds) }
         }
     }
 
-    /** Download the complete SCP currently stored on the device (all fragments assembled). */
     fun startScpDownload() {
         scope.launch {
-            prepareDevice()
-            _lastScpBytes.value = null
-            val orch = ScpDownloadOrchestrator(commands = commands)
-            scpOrch = orch
-            pulseOrch = null
-            ecgOrch = null
-            _status.value = Status.Running(Scenario.SCP_DOWNLOAD)
-            collectJob?.cancel()
-            collectJob = scope.launch {
-                client.incomingFrames.collect { frame ->
-                    noteDeviceAlerts(frame)
-                    dispatch(orch.onFrame(frame))
-                }
-            }
-            dispatch(
-                orch.start(
-                    ScpDownloadOrchestrator.Config(
-                        unixTimestampSeconds = System.currentTimeMillis() / 1000L,
-                        samplingHz = 250,
-                        pulseAverageSeconds = 10,
-                    ),
-                ),
-            )
+            runCatching { runScpDownload() }
         }
     }
+
+    /** Init → ECG Offline → Offline Done → End. SCP zostaje na urządzeniu. */
+    suspend fun runEcgOfflineCreate(userId: String, totalSeconds: Int = 10) =
+        withContext(Dispatchers.IO) {
+            scenarioMutex.withLock {
+                prepareDevice()
+                val orch = EcgOfflineCreateOrchestrator(commands = commands)
+                ecgOrch = orch
+                pulseOrch = null
+                scpOrch = null
+                val outcome = CompletableDeferred<Status>()
+                activeOutcome = outcome
+                _status.value = Status.Running(Scenario.ECG_OFFLINE_CREATE)
+                collectJob?.cancel()
+                // Osobny dispatcher — unikamy deadlocku Main (await vs collect).
+                collectJob = scope.launch(Dispatchers.IO) {
+                    client.incomingFrames.collect { frame ->
+                        noteDeviceAlerts(frame)
+                        dispatch(orch.onFrame(frame))
+                    }
+                }
+                dispatch(
+                    orch.start(
+                        EcgOfflineCreateOrchestrator.Config(
+                            unixTimestampSeconds = System.currentTimeMillis() / 1000L,
+                            samplingHz = 250,
+                            pulseAverageSeconds = 10,
+                            lookbackSeconds = 0,
+                            totalSeconds = totalSeconds.coerceAtLeast(2),
+                            userId = userId,
+                            reinitAfterEnd = false,
+                        ),
+                    ),
+                )
+                val result = withTimeout((totalSeconds + 60L) * 1_000) { outcome.await() }
+                activeOutcome = null
+                if (result is Status.Failed) error(result.reason)
+            }
+        }
+
+    /** Init → GetScp* → pełny plik → ScpDone → End. */
+    suspend fun runScpDownload(): ByteArray =
+        withContext(Dispatchers.IO) {
+            scenarioMutex.withLock {
+                prepareDevice()
+                _lastScpBytes.value = null
+                val orch = ScpDownloadOrchestrator(commands = commands)
+                scpOrch = orch
+                pulseOrch = null
+                ecgOrch = null
+                val outcome = CompletableDeferred<Status>()
+                activeOutcome = outcome
+                _status.value = Status.Running(Scenario.SCP_DOWNLOAD)
+                collectJob?.cancel()
+                collectJob = scope.launch(Dispatchers.IO) {
+                    client.incomingFrames.collect { frame ->
+                        noteDeviceAlerts(frame)
+                        dispatch(orch.onFrame(frame))
+                    }
+                }
+                dispatch(
+                    orch.start(
+                        ScpDownloadOrchestrator.Config(
+                            unixTimestampSeconds = System.currentTimeMillis() / 1000L,
+                            samplingHz = 250,
+                            pulseAverageSeconds = 10,
+                        ),
+                    ),
+                )
+                val result = withTimeout(180_000) { outcome.await() }
+                activeOutcome = null
+                if (result is Status.Failed) error(result.reason)
+                _lastScpBytes.value?.takeIf { it.isNotEmpty() }
+                    ?: error("Pobrano pusty SCP")
+            }
+        }
+
+    /**
+     * Init → Get Pulse (stream) przez [durationSec] → stop → End.
+     * BPM na [lastPulseBpm] w trakcie.
+     */
+    suspend fun runPulseFor(durationSec: Int) =
+        withContext(Dispatchers.IO) {
+            scenarioMutex.withLock {
+                prepareDevice()
+                _lastPulseBpm.value = null
+                _pulseSampleCount.value = 0
+                _electrodeWarning.value = null
+                val orch = PulseScenarioOrchestrator(
+                    commands = commands,
+                    autoStopAfterPulses = Int.MAX_VALUE,
+                )
+                pulseOrch = orch
+                ecgOrch = null
+                scpOrch = null
+                val outcome = CompletableDeferred<Status>()
+                activeOutcome = outcome
+                _status.value = Status.Running(Scenario.PULSE)
+                collectJob?.cancel()
+                collectJob = scope.launch(Dispatchers.IO) {
+                    client.incomingFrames.collect { frame ->
+                        noteDeviceAlerts(frame)
+                        if (frame.type == FrameType.PULSE_VALUE && frame.payload.isNotEmpty()) {
+                            publishPulse(PayloadCodec.parsePulseValue(frame.payload))
+                        }
+                        dispatch(orch.onFrame(frame))
+                    }
+                }
+                dispatch(
+                    orch.start(
+                        PulseScenarioOrchestrator.Config(
+                            unixTimestampSeconds = System.currentTimeMillis() / 1000L,
+                            samplingHz = 250,
+                            pulseAverageSeconds = 10,
+                            pulseIntervalTenths = 10,
+                        ),
+                    ),
+                )
+                delay(durationSec.coerceAtLeast(1) * 1_000L)
+                dispatch(orch.requestStop())
+                val result = withTimeout(45_000) { outcome.await() }
+                activeOutcome = null
+                if (result is Status.Failed) error(result.reason)
+            }
+        }
 
     fun stop() {
         collectJob?.cancel()
@@ -169,12 +220,13 @@ class ProtocolSessionController(
         pulseOrch = null
         ecgOrch = null
         scpOrch = null
+        activeOutcome?.let { def ->
+            if (!def.isCompleted) def.complete(Status.Failed("Scenariusz przerwany"))
+        }
+        activeOutcome = null
         _status.value = Status.Idle
     }
 
-    /**
-     * Best-effort End so firmware clears `app_init_flag` before a new scenario Init.
-     */
     private suspend fun prepareDevice() {
         stop()
         _status.value = Status.Info("Sending End to clear previous Init (if any)")
@@ -213,9 +265,20 @@ class ProtocolSessionController(
                     _status.value = Status.Info("Pobrano cały plik SCP (${event.bytes.size} B)")
                 }
                 is ScenarioEvent.Info -> _status.value = Status.Info(event.message)
-                is ScenarioEvent.Failed -> _status.value = Status.Failed(event.reason)
-                ScenarioEvent.Finished -> _status.value = Status.Finished
+                is ScenarioEvent.Failed -> {
+                    _status.value = Status.Failed(event.reason)
+                    completeOutcome(Status.Failed(event.reason))
+                }
+                ScenarioEvent.Finished -> {
+                    _status.value = Status.Finished
+                    completeOutcome(Status.Finished)
+                }
             }
         }
+    }
+
+    private fun completeOutcome(status: Status) {
+        val def = activeOutcome ?: return
+        if (!def.isCompleted) def.complete(status)
     }
 }

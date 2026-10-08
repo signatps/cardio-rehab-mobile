@@ -6,9 +6,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import pl.cardioscp.rehab.ble.BleMeasureController
 import pl.cardioscp.rehab.ble.VitalMeasureType
 import pl.cardioscp.rehab.ble.VitalReading
@@ -19,8 +17,9 @@ import pl.cardioscp.rehab.scp.ScpRecording
 import pl.cardioscp.rehab.scp.ScpRecordingStore
 
 /**
- * Orkiestracja sesji rehabilitacji:
- * EKG → ciśnienie → [waga HF] → ankieta → trening sekwencyjny → podsumowanie.
+ * Sesja rehabilitacji:
+ * EKG (Init→Offline→SCP) → ciśnienie → [waga] → ankieta → dopuszczenie 10 s →
+ * EKG spoczynkowe treningu → ×N (ćwiczenie+puls → EKG szczyt → odpoczynek) → podsumowanie.
  */
 class RehabSessionEngine(
     private val scope: CoroutineScope,
@@ -34,15 +33,20 @@ class RehabSessionEngine(
     private val _state = MutableStateFlow<RehabSessionState?>(null)
     val state: StateFlow<RehabSessionState?> = _state.asStateFlow()
 
-    /** Gdy true, HomeViewModel nie otwiera automatycznie przeglądarki po SCP. */
     val suppressAutoViewer: Boolean
         get() = _state.value != null && _state.value?.step != RehabStep.SUMMARY
 
     private var trainingJob: Job? = null
+    private var admissionJob: Job? = null
+    private var pulseWatchJob: Job? = null
     @Volatile private var skipCurrentPhase: Boolean = false
+    @Volatile private var abortTraining: Boolean = false
 
     fun start(includeWeight: Boolean = true, plan: TrainingPlan = TrainingPlan()) {
         trainingJob?.cancel()
+        admissionJob?.cancel()
+        pulseWatchJob?.cancel()
+        abortTraining = false
         _state.value = RehabSessionState(
             step = RehabStep.INTRO,
             includeWeight = includeWeight,
@@ -51,8 +55,13 @@ class RehabSessionEngine(
     }
 
     fun cancel() {
+        abortTraining = true
         trainingJob?.cancel()
+        admissionJob?.cancel()
+        pulseWatchJob?.cancel()
         trainingJob = null
+        admissionJob = null
+        pulseWatchJob = null
         bleMeasure.release()
         sessionController.stop()
         _state.value = null
@@ -64,10 +73,17 @@ class RehabSessionEngine(
             update { it.copy(error = "Połącz najpierw EHO-Mini (SPP).") }
             return
         }
-        update { it.copy(step = RehabStep.ECG_BASELINE, busy = true, error = null, statusMessage = "Akwizycja EKG spoczynkowego…") }
+        update {
+            it.copy(
+                step = RehabStep.ECG_BASELINE,
+                busy = true,
+                error = null,
+                statusMessage = "Init → EKG Offline → pobieranie SCP…",
+            )
+        }
         scope.launch {
             val result = acquireEcg(
-                label = "EKG spoczynkowe",
+                label = "EKG spoczynkowe (przed sesją)",
                 totalSeconds = s.trainingPlan.acquireSec,
             )
             result.fold(
@@ -76,7 +92,7 @@ class RehabSessionEngine(
                         it.copy(
                             busy = false,
                             statusMessage = "Zapisano ${rec.displayName}",
-                            ecgEntries = it.ecgEntries + SessionEcgEntry("EKG spoczynkowe", rec),
+                            ecgEntries = it.ecgEntries + SessionEcgEntry("EKG spoczynkowe (przed sesją)", rec),
                             step = RehabStep.VITALS_BP,
                         )
                     }
@@ -145,9 +161,7 @@ class RehabSessionEngine(
     }
 
     fun answerSurvey(questionId: String, yes: Boolean) {
-        update {
-            it.copy(surveyAnswers = it.surveyAnswers + (questionId to yes))
-        }
+        update { it.copy(surveyAnswers = it.surveyAnswers + (questionId to yes), error = null) }
     }
 
     fun submitSurvey() {
@@ -163,14 +177,38 @@ class RehabSessionEngine(
                     statusMessage = "Ankieta dyskwalifikuje z treningu — skontaktuj się z opiekunem.",
                 )
             }
-            SurveyOutcome.PASS -> {
-                update { it.copy(error = null, statusMessage = "Ankieta OK — start treningu") }
-                startTraining()
+            SurveyOutcome.PASS -> startAdmissionWait()
+        }
+    }
+
+    private fun startAdmissionWait() {
+        val waitSec = _state.value?.trainingPlan?.admissionWaitSec ?: 10
+        update {
+            it.copy(
+                step = RehabStep.ADMISSION_WAIT,
+                error = null,
+                admissionRemainingSec = waitSec,
+                statusMessage = "Oczekiwanie na dopuszczenie do treningu…",
+            )
+        }
+        admissionJob?.cancel()
+        admissionJob = scope.launch {
+            for (left in waitSec downTo 1) {
+                update {
+                    it.copy(
+                        admissionRemainingSec = left,
+                        statusMessage = "Dopuszczenie za ${left}s…",
+                    )
+                }
+                delay(1_000)
             }
+            update { it.copy(admissionRemainingSec = 0, statusMessage = "Dopuszczono — start treningu") }
+            startTraining()
         }
     }
 
     fun finishDisqualified() {
+        admissionJob?.cancel()
         update { it.copy(step = RehabStep.SUMMARY, statusMessage = "Sesja zakończona (dyskwalifikacja)") }
     }
 
@@ -182,9 +220,11 @@ class RehabSessionEngine(
         }
         val timeline = TrainingPlanner.interval(s.trainingPlan)
         val first = timeline.phases.first()
+        abortTraining = false
         update {
             it.copy(
                 step = RehabStep.TRAINING,
+                admissionRemainingSec = null,
                 training = TrainingLiveState(
                     phase = first,
                     phaseElapsedSec = 0,
@@ -195,11 +235,12 @@ class RehabSessionEngine(
             )
         }
         trainingJob?.cancel()
-        trainingJob = scope.launch { runTraining(timeline, s.trainingPlan) }
+        trainingJob = scope.launch { runTraining(timeline) }
     }
 
-    private suspend fun runTraining(timeline: TrainingTimeline, plan: TrainingPlan) {
+    private suspend fun runTraining(timeline: TrainingTimeline) {
         for (phase in timeline.phases) {
+            if (abortTraining) break
             skipCurrentPhase = false
             update {
                 it.copy(
@@ -208,38 +249,106 @@ class RehabSessionEngine(
                         phaseElapsedSec = 0,
                         phaseRemainingSec = phase.durationSec,
                         message = phase.label,
+                        acquiringEcg = phase.kind == TrainingPhaseKind.ECG_REST_START ||
+                            phase.kind == TrainingPhaseKind.ECG_PEAK,
+                        measuringPulse = phase.kind == TrainingPhaseKind.EXERCISE,
                     ),
+                    statusMessage = phase.label,
+                    busy = phase.kind == TrainingPhaseKind.ECG_REST_START ||
+                        phase.kind == TrainingPhaseKind.ECG_PEAK,
                 )
             }
-            if (phase.ecgAtStart && phase.ecgLabel != null) {
-                runEcgSlot(phase.ecgLabel)
-            }
-            for (elapsed in 0 until phase.durationSec) {
-                if (skipCurrentPhase) break
-                delay(1_000)
-                update {
-                    val t = it.training ?: return@update it
-                    it.copy(
-                        training = t.copy(
-                            phaseElapsedSec = elapsed + 1,
-                            phaseRemainingSec = (phase.durationSec - elapsed - 1).coerceAtLeast(0),
-                            pausedForEvent = false,
-                        ),
-                    )
+            when (phase.kind) {
+                TrainingPhaseKind.ECG_REST_START,
+                TrainingPhaseKind.ECG_PEAK,
+                -> {
+                    runEcgSlot(phase.label)
+                }
+                TrainingPhaseKind.EXERCISE -> {
+                    runExerciseWithPulse(phase)
+                }
+                TrainingPhaseKind.REST -> {
+                    runTimedPhase(phase)
                 }
             }
-            if (TrainingPlanner.needsEndOfLastExerciseEcg(phase, plan)) {
-                runEcgSlot("EKG przed koniec treningu")
-            }
         }
+        pulseWatchJob?.cancel()
         sessionController.stop()
         update {
             it.copy(
                 step = RehabStep.SUMMARY,
                 training = null,
                 busy = false,
-                statusMessage = "Trening zakończony",
+                statusMessage = if (abortTraining) "Trening przerwany" else "Trening zakończony",
             )
+        }
+    }
+
+    private suspend fun runExerciseWithPulse(phase: TrainingPhase) {
+        pulseWatchJob?.cancel()
+        pulseWatchJob = scope.launch {
+            sessionController.lastPulseBpm.collect { bpm ->
+                update {
+                    val t = it.training ?: return@update it
+                    if (t.phase.index != phase.index) return@update it
+                    it.copy(training = t.copy(pulseBpm = bpm))
+                }
+            }
+        }
+        val pulseJob = scope.launch {
+            runCatching {
+                sessionController.runPulseFor(phase.durationSec)
+            }.onFailure { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                update {
+                    it.copy(
+                        statusMessage = "Puls: ${e.message ?: "błąd"} — kończę fazę",
+                    )
+                }
+            }
+        }
+        for (elapsed in 0 until phase.durationSec) {
+            if (skipCurrentPhase || abortTraining) break
+            update {
+                val t = it.training ?: return@update it
+                it.copy(
+                    training = t.copy(
+                        phaseElapsedSec = elapsed,
+                        phaseRemainingSec = (phase.durationSec - elapsed).coerceAtLeast(0),
+                        measuringPulse = true,
+                        message = phase.label + (t.pulseBpm?.let { bpm -> " · $bpm bpm" } ?: ""),
+                    ),
+                )
+            }
+            delay(1_000)
+        }
+        if (skipCurrentPhase || abortTraining) {
+            pulseJob.cancel()
+            sessionController.stop()
+        }
+        runCatching { pulseJob.join() }
+        pulseWatchJob?.cancel()
+        pulseWatchJob = null
+        sessionController.stop()
+        delay(200)
+    }
+
+    private suspend fun runTimedPhase(phase: TrainingPhase) {
+        for (elapsed in 0 until phase.durationSec) {
+            if (skipCurrentPhase || abortTraining) break
+            update {
+                val t = it.training ?: return@update it
+                it.copy(
+                    training = t.copy(
+                        phaseElapsedSec = elapsed + 1,
+                        phaseRemainingSec = (phase.durationSec - elapsed - 1).coerceAtLeast(0),
+                        measuringPulse = false,
+                        acquiringEcg = false,
+                        pausedForEvent = false,
+                    ),
+                )
+            }
+            delay(1_000)
         }
     }
 
@@ -248,8 +357,12 @@ class RehabSessionEngine(
             val t = it.training
             it.copy(
                 busy = true,
-                training = t?.copy(acquiringEcg = true, acquireLabel = label, message = label),
-                statusMessage = label,
+                training = t?.copy(
+                    acquiringEcg = true,
+                    measuringPulse = false,
+                    message = label,
+                ),
+                statusMessage = "Init → EKG Offline ($label) → pobieranie SCP…",
             )
         }
         val plan = _state.value?.trainingPlan ?: TrainingPlan()
@@ -261,8 +374,9 @@ class RehabSessionEngine(
                     it.copy(
                         busy = false,
                         ecgEntries = it.ecgEntries + SessionEcgEntry(label, rec),
-                        training = t?.copy(acquiringEcg = false, acquireLabel = null),
+                        training = t?.copy(acquiringEcg = false),
                         statusMessage = "Zapisano $label",
+                        error = null,
                     )
                 }
             },
@@ -273,7 +387,6 @@ class RehabSessionEngine(
                         busy = false,
                         training = t?.copy(
                             acquiringEcg = false,
-                            acquireLabel = null,
                             message = "Błąd EKG: ${e.message}",
                         ),
                         error = e.message,
@@ -283,47 +396,20 @@ class RehabSessionEngine(
         )
     }
 
-    /**
-     * ECG Offline (totalSeconds) → GetScp → zapis lokalny (bez auto-viewer).
-     */
+    /** Init → Offline → Done → End → Init → GetScp → zapis. */
     private suspend fun acquireEcg(label: String, totalSeconds: Int): Result<ScpRecording> {
         return runCatching {
             if (deviceClient.connectionState.value !is EhoMiniConnectionState.Connected) {
                 error("Brak połączenia SPP z EHO-Mini")
             }
             val userId = userIdProvider()
-            sessionController.startEcgOfflineCreateScenario(userId, totalSeconds = totalSeconds)
-            withTimeout((totalSeconds + 45L) * 1_000) {
-                sessionController.status.first {
-                    it is ProtocolSessionController.Status.Finished ||
-                        it is ProtocolSessionController.Status.Failed
-                }
-            }.let { st ->
-                if (st is ProtocolSessionController.Status.Failed) {
-                    error(st.reason)
-                }
-            }
-            delay(300)
-            sessionController.startScpDownload()
-            val bytes = withTimeout(120_000) {
-                sessionController.lastScpBytes.first { it != null && it.isNotEmpty() }!!
-            }
-            // Wait download finished
-            withTimeout(60_000) {
-                sessionController.status.first {
-                    it is ProtocolSessionController.Status.Finished ||
-                        it is ProtocolSessionController.Status.Failed
-                }
-            }.let { st ->
-                if (st is ProtocolSessionController.Status.Failed) {
-                    error(st.reason)
-                }
-            }
+            update { it.copy(statusMessage = "$label: Init + EKG Offline (${totalSeconds}s)…") }
+            sessionController.runEcgOfflineCreate(userId, totalSeconds = totalSeconds)
+            update { it.copy(statusMessage = "$label: pobieranie SCP…") }
+            val bytes = sessionController.runScpDownload()
             val serial = (deviceClient.connectionState.value as? EhoMiniConnectionState.Connected)
                 ?.deviceName?.takeLast(6)
-            recordingStore.saveComplete(bytes, serial).also {
-                // Prefer readable label in session list; file keeps timestamp name.
-            }
+            recordingStore.saveComplete(bytes, serial)
         }.recoverCatching { e ->
             throw IllegalStateException("$label: ${e.message}", e)
         }
@@ -334,7 +420,6 @@ class RehabSessionEngine(
     }
 
     fun reportEcgEvent() {
-        // PDF: event w wysiłku → odpoczynek; w odpoczynku → koniec po potwierdzeniu.
         val s = _state.value ?: return
         val t = s.training ?: return
         when (t.phase.kind) {
@@ -343,12 +428,12 @@ class RehabSessionEngine(
                     it.copy(
                         training = t.copy(
                             pausedForEvent = true,
-                            message = "Zdarzenie EKG — przejdź do odpoczynku (potwierdź).",
+                            message = "Zdarzenie — przejść do EKG szczytowego / odpoczynku?",
                         ),
                     )
                 }
             }
-            TrainingPhaseKind.REST, TrainingPhaseKind.POST_TRAINING -> {
+            TrainingPhaseKind.REST -> {
                 update {
                     it.copy(
                         training = t.copy(
@@ -358,6 +443,7 @@ class RehabSessionEngine(
                     )
                 }
             }
+            TrainingPhaseKind.ECG_REST_START, TrainingPhaseKind.ECG_PEAK -> Unit
         }
     }
 
@@ -366,7 +452,10 @@ class RehabSessionEngine(
         val t = s.training ?: return
         if (!t.pausedForEvent) return
         if (endTraining || t.phase.kind != TrainingPhaseKind.EXERCISE) {
+            abortTraining = true
+            skipCurrentPhase = true
             trainingJob?.cancel()
+            pulseWatchJob?.cancel()
             sessionController.stop()
             update {
                 it.copy(
@@ -376,14 +465,13 @@ class RehabSessionEngine(
                 )
             }
         } else {
-            // PDF: zdarzenie w wysiłku → przejdź do odpoczynku.
             skipCurrentPhase = true
             update {
                 it.copy(
                     training = t.copy(
                         pausedForEvent = false,
                         phaseRemainingSec = 0,
-                        message = "Przejście do odpoczynku…",
+                        message = "Kończę wysiłek…",
                     ),
                 )
             }

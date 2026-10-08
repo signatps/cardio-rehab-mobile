@@ -10,6 +10,7 @@ enum class RehabStep {
     VITALS_WEIGHT,
     SURVEY,
     SURVEY_DISQUALIFIED,
+    ADMISSION_WAIT,
     TRAINING,
     SUMMARY,
 }
@@ -32,7 +33,8 @@ data class TrainingLiveState(
     val phaseElapsedSec: Int,
     val phaseRemainingSec: Int,
     val acquiringEcg: Boolean = false,
-    val acquireLabel: String? = null,
+    val measuringPulse: Boolean = false,
+    val pulseBpm: Int? = null,
     val message: String = "",
     val pausedForEvent: Boolean = false,
 )
@@ -45,6 +47,7 @@ data class RehabSessionState(
     val surveyAnswers: Map<String, Boolean> = emptyMap(),
     val ecgEntries: List<SessionEcgEntry> = emptyList(),
     val training: TrainingLiveState? = null,
+    val admissionRemainingSec: Int? = null,
     val busy: Boolean = false,
     val statusMessage: String? = null,
     val error: String? = null,

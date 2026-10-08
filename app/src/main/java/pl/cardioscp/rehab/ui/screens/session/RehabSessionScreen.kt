@@ -97,7 +97,7 @@ fun RehabSessionScreen(
             )
             RehabStep.ECG_BASELINE -> {
                 Text(
-                    "Rejestracja EKG spoczynkowego na EHO-Mini…",
+                    "Inicjalizacja EHO-Mini, zapis EKG Offline i pobranie SCP…",
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 if (state.busy) {
@@ -155,6 +155,27 @@ fun RehabSessionScreen(
                     Text("Przejdź do podsumowania")
                 }
             }
+            RehabStep.ADMISSION_WAIT -> {
+                Text(
+                    "Ankieta zaliczona. Oczekiwanie na dopuszczenie do treningu…",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Spacer(Modifier.height(12.dp))
+                val left = state.admissionRemainingSec ?: 0
+                Text(
+                    "%d s".format(left),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = DeepTeal,
+                    fontWeight = FontWeight.Bold,
+                )
+                LinearProgressIndicator(
+                    progress = {
+                        val total = state.trainingPlan.admissionWaitSec.coerceAtLeast(1)
+                        1f - left.toFloat() / total
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             RehabStep.TRAINING -> {
                 val t = state.training
                 if (t == null) {
@@ -163,26 +184,43 @@ fun RehabSessionScreen(
                     Text(t.phase.label, style = MaterialTheme.typography.headlineSmall, color = DeepTeal)
                     Text(
                         when (t.phase.kind) {
-                            TrainingPhaseKind.EXERCISE -> "Ćwicz zgodnie z planem"
+                            TrainingPhaseKind.ECG_REST_START -> "Akwizycja EKG spoczynkowego"
+                            TrainingPhaseKind.EXERCISE -> "Ćwicz — pomiar tętna z EHO-Mini"
+                            TrainingPhaseKind.ECG_PEAK -> "Akwizycja EKG w szczycie wysiłku"
                             TrainingPhaseKind.REST -> "Odpoczynek"
-                            TrainingPhaseKind.POST_TRAINING -> "Spoczynek po treningu"
                         },
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Spacer(Modifier.height(8.dp))
+                    if (t.measuringPulse) {
+                        Text(
+                            t.pulseBpm?.let { "Tętno: $it bpm" } ?: "Tętno: oczekiwanie…",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = DeepTeal,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
                     val total = t.phase.durationSec.coerceAtLeast(1)
-                    LinearProgressIndicator(
-                        progress = { t.phaseElapsedSec.toFloat() / total },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(
-                        "Pozostało %d:%02d".format(t.phaseRemainingSec / 60, t.phaseRemainingSec % 60),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    if (t.phase.kind == TrainingPhaseKind.EXERCISE ||
+                        t.phase.kind == TrainingPhaseKind.REST
+                    ) {
+                        LinearProgressIndicator(
+                            progress = { t.phaseElapsedSec.toFloat() / total },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            "Pozostało %d:%02d".format(
+                                t.phaseRemainingSec / 60,
+                                t.phaseRemainingSec % 60,
+                            ),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                     if (t.acquiringEcg) {
                         Spacer(Modifier.height(8.dp))
-                        Text(t.acquireLabel ?: "Akwizycja EKG…", color = DeepTeal)
+                        Text("Init → Offline → pobieranie SCP…", color = DeepTeal)
                         LinearProgressIndicator(
                             progress = { 0f },
                             modifier = Modifier.fillMaxWidth(),
@@ -204,7 +242,7 @@ fun RehabSessionScreen(
                             Button(
                                 onClick = { viewModel.confirmEcgEvent(endTraining = false) },
                                 modifier = Modifier.fillMaxWidth(),
-                            ) { Text("Przejdź do odpoczynku") }
+                            ) { Text("Zakończ wysiłek (dalej EKG szczyt)") }
                         }
                         Button(
                             onClick = { viewModel.confirmEcgEvent(endTraining = true) },
@@ -235,13 +273,14 @@ fun RehabSessionScreen(
 private fun StepHeader(step: RehabStep) {
     val label = when (step) {
         RehabStep.INTRO -> "Start"
-        RehabStep.ECG_BASELINE -> "1/5 EKG spoczynkowe"
-        RehabStep.VITALS_BP -> "2/5 Ciśnienie"
-        RehabStep.VITALS_WEIGHT -> "2b/5 Waga"
-        RehabStep.SURVEY -> "3/5 Ankieta"
+        RehabStep.ECG_BASELINE -> "1. EKG spoczynkowe + SCP"
+        RehabStep.VITALS_BP -> "2. Ciśnienie"
+        RehabStep.VITALS_WEIGHT -> "2b. Waga"
+        RehabStep.SURVEY -> "3. Ankieta"
         RehabStep.SURVEY_DISQUALIFIED -> "Ankieta — dyskwalifikacja"
-        RehabStep.TRAINING -> "4/5 Trening sekwencyjny"
-        RehabStep.SUMMARY -> "5/5 Podsumowanie"
+        RehabStep.ADMISSION_WAIT -> "4. Dopuszczenie"
+        RehabStep.TRAINING -> "5. Trening sekwencyjny"
+        RehabStep.SUMMARY -> "6. Podsumowanie"
     }
     Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(8.dp))
@@ -261,12 +300,13 @@ private fun IntroContent(onStart: (includeWeight: Boolean) -> Unit) {
             style = MaterialTheme.typography.titleMedium,
             color = DeepTeal,
         )
-        Text("1. EKG spoczynkowe (EHO-Mini)")
+        Text("1. EKG spoczynkowe: Init → Offline → pobranie SCP")
         Text("2. Ciśnienie tętnicze (BLE)")
         Text("3. Waga — gdy niewydolność serca (BLE)")
         Text("4. Ankieta kwalifikacyjna")
-        Text("5. Trening sekwencyjny interwałowy (3×1 min wysiłek / 1 min odpoczynek) ze sterowaniem EKG")
-        Text("6. Podsumowanie i przegląd EKG z sesji")
+        Text("5. Oczekiwanie na dopuszczenie (10 s)")
+        Text("6. Trening: EKG spoczynkowe → 3× (1 min ćwiczenie + puls → EKG szczyt → 1 min odpoczynek)")
+        Text("7. Podsumowanie i przegląd EKG z sesji")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = includeWeight, onCheckedChange = { includeWeight = it })
             Text("Niewydolność serca — mierz także wagę")

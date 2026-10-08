@@ -203,8 +203,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 exerciseSec = 60,
                 restSec = 60,
                 acquireSec = 10,
-                acquireLeadSec = 0,
-                postTrainingSec = 120,
+                admissionWaitSec = 10,
             ),
         )
         rehabEngine.beginBaselineEcg()
