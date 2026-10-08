@@ -350,6 +350,31 @@ class BleMeasureController(context: Context) {
         measureComment = comment
     }
 
+    /** Wynik testowy (jak DSD simulate) — pozwala iść dalej bez ciśnieniomierza / wagi. */
+    fun simulateMeasure() {
+        ble.stop()
+        pendingBleAutoStart = false
+        autoConnectArmed = false
+        pendingBlePermission = false
+        mainHandler.removeCallbacks(preferBdaOfferRunnable)
+        bleHits.clear()
+        bleOfferOtherDevices = false
+        bleShowOtherDevicePicker = false
+        val kind = VitalKindMapping.kindFor(measureType)
+        ble.simulate(kind) { result ->
+            result.fold(
+                onSuccess = { reading ->
+                    presentPendingReading(
+                        reading.copy(measuredAtMs = System.currentTimeMillis()),
+                        persistBdaFrom = null,
+                    )
+                    bleStatus = "Wynik symulowany"
+                },
+                onFailure = { bleStatus = it.message.orEmpty() },
+            )
+        }
+    }
+
     fun saveMeasurePopup() {
         val reading = pendingReading ?: return
         if (!VitalKindMapping.hasValues(reading)) {

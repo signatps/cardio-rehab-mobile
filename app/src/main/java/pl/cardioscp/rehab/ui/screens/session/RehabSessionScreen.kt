@@ -123,6 +123,12 @@ fun RehabSessionScreen(
                 Button(onClick = viewModel::retryBpMeasure, modifier = Modifier.fillMaxWidth()) {
                     Text("Uruchom pomiar ciśnienia")
                 }
+                OutlinedButton(
+                    onClick = viewModel::simulateBpMeasure,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Symuluj wynik ciśnienia")
+                }
             }
             RehabStep.VITALS_WEIGHT -> {
                 Text(
@@ -136,6 +142,12 @@ fun RehabSessionScreen(
                 Spacer(Modifier.height(8.dp))
                 Button(onClick = viewModel::retryWeightMeasure, modifier = Modifier.fillMaxWidth()) {
                     Text("Uruchom pomiar wagi")
+                }
+                OutlinedButton(
+                    onClick = viewModel::simulateWeightMeasure,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Symuluj wynik wagi")
                 }
                 TextButton(onClick = viewModel::skipWeight) { Text("Pomiń wagę") }
             }

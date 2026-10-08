@@ -213,6 +213,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun beginBaselineEcg() = rehabEngine.beginBaselineEcg()
     fun retryBpMeasure() = rehabEngine.startBpMeasure()
     fun retryWeightMeasure() = rehabEngine.startWeightMeasure()
+    fun simulateBpMeasure() {
+        if (!bleMeasure.measurePopupOpen) rehabEngine.startBpMeasure()
+        bleMeasure.simulateMeasure()
+    }
+    fun simulateWeightMeasure() {
+        if (!bleMeasure.measurePopupOpen) rehabEngine.startWeightMeasure()
+        bleMeasure.simulateMeasure()
+    }
     fun skipWeight() = rehabEngine.skipWeight()
     fun answerSurvey(questionId: String, yes: Boolean) = rehabEngine.answerSurvey(questionId, yes)
     fun submitSurvey() = rehabEngine.submitSurvey()

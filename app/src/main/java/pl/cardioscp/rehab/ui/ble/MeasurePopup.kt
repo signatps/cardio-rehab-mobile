@@ -215,6 +215,20 @@ fun MeasurePopup(controller: BleMeasureController) {
                             Text("Użyj innego urządzenia")
                         }
                     }
+                    OutlinedButton(
+                        onClick = { controller.simulateMeasure() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(btnH)
+                            .testTag("dsd.measure.simulate"),
+                    ) {
+                        Text(
+                            when (controller.measureType) {
+                                VitalMeasureType.BLOOD_PRESSURE -> "Symuluj wynik ciśnienia"
+                                VitalMeasureType.WEIGHT -> "Symuluj wynik wagi"
+                            },
+                        )
+                    }
                     val selectable = controller.selectableBleHits()
                     if (selectable.isNotEmpty()) {
                         Text(
