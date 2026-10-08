@@ -1,8 +1,11 @@
 package pl.cardioscp.rehab.bluetooth.protocol
 
 /**
- * Scenario 3: Init → ECG Offline → Offline Done → End → Init (restart).
- * SCP file download happens later after reconnect (not in this scenario).
+ * Scenario 3: Init → ECG Offline → Offline Done → End → optional Re-Init.
+ *
+ * Firmware requires `totalSeconds > lookbackSeconds` and
+ * `ringBufferSeconds >= lookbackSeconds` or returns CmdError `0x05`.
+ * Right after Init the buffer is empty → use lookback=0 unless caller waited.
  */
 class EcgOfflineCreateOrchestrator(
     private val commands: CommandFactory = CommandFactory(),
@@ -18,7 +21,7 @@ class EcgOfflineCreateOrchestrator(
         val reinitAfterEnd: Boolean = true,
     )
 
-    private enum class AckKind { INIT, ECG_OFFLINE, END, REINIT }
+    private enum class AckKind { INIT, ECG_OFFLINE, END, REINIT, END_AFTER_ERROR }
 
     enum class Phase { IDLE, RUNNING, FINISHED, FAILED }
 
@@ -31,7 +34,9 @@ class EcgOfflineCreateOrchestrator(
 
     fun start(config: Config): List<ScenarioEvent> {
         check(phase == Phase.IDLE || phase == Phase.FINISHED || phase == Phase.FAILED)
-        require(config.lookbackSeconds <= config.totalSeconds)
+        require(config.totalSeconds > config.lookbackSeconds) {
+            "firmware requires totalSeconds > lookbackSeconds"
+        }
         this.config = config
         pendingAcks.clear()
         waitingOfflineDone = false
@@ -51,11 +56,10 @@ class EcgOfflineCreateOrchestrator(
         when (frame.type) {
             FrameType.ACK -> handleAck(frame, out)
             FrameType.ECG_OFFLINE_DONE -> handleOfflineDone(out)
-            FrameType.COMMAND_ERROR -> {
-                val err = PayloadCodec.parseCommandError(frame.payload)
-                fail("command error 0x${err.code.toString(16)}", out)
+            FrameType.COMMAND_ERROR -> handleCommandError(frame, out)
+            FrameType.DEVICE_ERROR -> {
+                out += ScenarioEvent.Info("device async error during ECG offline")
             }
-            FrameType.DEVICE_ERROR -> fail("device error", out)
             else -> Unit
         }
         return out
@@ -95,8 +99,12 @@ class EcgOfflineCreateOrchestrator(
             }
             AckKind.REINIT -> {
                 phase = Phase.FINISHED
-                out += ScenarioEvent.Info("SCP file kept on device until Get SCP after reconnect")
+                out += ScenarioEvent.Info("SCP on device — Get SCP after reconnect")
                 out += ScenarioEvent.Finished
+            }
+            AckKind.END_AFTER_ERROR -> {
+                phase = Phase.FAILED
+                out += ScenarioEvent.Failed("ECG Offline failed; End sent to clear Init")
             }
         }
     }
@@ -110,8 +118,26 @@ class EcgOfflineCreateOrchestrator(
         out += ScenarioEvent.Outbound(end)
     }
 
-    private fun fail(reason: String, out: MutableList<ScenarioEvent>) {
-        phase = Phase.FAILED
-        out += ScenarioEvent.Failed(reason)
+    private fun handleCommandError(frame: ProtocolFrame, out: MutableList<ScenarioEvent>) {
+        pendingAcks.keys
+            .filter { pendingAcks[it] == AckKind.ECG_OFFLINE }
+            .forEach { pendingAcks.remove(it) }
+        waitingOfflineDone = false
+
+        val err = PayloadCodec.parseCommandError(frame.payload)
+        val detail = when (err.code) {
+            PayloadCodec.CommandErrorCode.LOOKBACK_UNAVAILABLE -> {
+                val available = err.detail.firstOrNull()?.toInt()?.and(0xFF) ?: -1
+                "lookback unavailable (buffer=${available}s)"
+            }
+            PayloadCodec.CommandErrorCode.ECG_IN_PROGRESS -> "ECG in progress"
+            PayloadCodec.CommandErrorCode.NO_SCP_FILE -> "no SCP file"
+            else -> "command error 0x${err.code.toString(16)}"
+        }
+        out += ScenarioEvent.Info(detail)
+        // Clear app_init_flag on device so next Init can succeed.
+        val end = commands.end()
+        pendingAcks[end.sequence] = AckKind.END_AFTER_ERROR
+        out += ScenarioEvent.Outbound(end)
     }
 }

@@ -1,12 +1,15 @@
 package pl.cardioscp.rehab.bluetooth.protocol
 
 /**
- * Scenario 2: Init → Get Pulse (interval>0) → PulseValues → Get Pulse(0) → End.
+ * Scenario 2: Init → Get Pulse (interval>0) → PulseValues → Get Pulse(0) → final Pulse → End.
+ *
+ * Firmware (`app_get_pulse`): after stop (interval=0) it ACKs then sends one last Pulse Value.
  */
 class PulseScenarioOrchestrator(
     private val commands: CommandFactory = CommandFactory(),
     private val ackPulseValues: Boolean = true,
-    private val autoStopAfterPulses: Int = 3,
+    /** Pulses to collect before stop; keep ≥ avg window so BPM can leave 0. */
+    private val autoStopAfterPulses: Int = 12,
 ) {
     data class Config(
         val unixTimestampSeconds: Long,
@@ -27,6 +30,7 @@ class PulseScenarioOrchestrator(
     private val pendingAcks = mutableMapOf<Int, AckKind>()
     private var pulsesReceived = 0
     private var stopRequested = false
+    private var waitingFinalPulse = false
 
     fun start(config: Config): List<ScenarioEvent> {
         check(phase == Phase.IDLE || phase == Phase.FINISHED || phase == Phase.FAILED)
@@ -35,6 +39,7 @@ class PulseScenarioOrchestrator(
         pendingAcks.clear()
         pulsesReceived = 0
         stopRequested = false
+        waitingFinalPulse = false
         phase = Phase.RUNNING
         val init = commands.init(
             config.unixTimestampSeconds,
@@ -46,7 +51,6 @@ class PulseScenarioOrchestrator(
         return listOf(ScenarioEvent.Outbound(init))
     }
 
-    /** Manual stop of continuous pulse (Get Pulse with 0) before End. */
     fun requestStop(): List<ScenarioEvent> {
         if (phase != Phase.RUNNING || stopRequested) return emptyList()
         return sendStopPulse()
@@ -61,7 +65,10 @@ class PulseScenarioOrchestrator(
                 val err = PayloadCodec.parseCommandError(frame.payload)
                 fail("command error 0x${err.code.toString(16)}", out)
             }
-            FrameType.DEVICE_ERROR -> fail("device error", out)
+            FrameType.DEVICE_ERROR -> {
+                // Electrode disconnect etc. — do not abort pulse scenario.
+                out += ScenarioEvent.Info("device async error (ignored during pulse)")
+            }
             else -> Unit
         }
         return out
@@ -78,9 +85,8 @@ class PulseScenarioOrchestrator(
             }
             AckKind.GET_PULSE_START -> out += ScenarioEvent.Info("Pulse stream armed")
             AckKind.GET_PULSE_STOP -> {
-                val end = commands.end()
-                pendingAcks[end.sequence] = AckKind.END
-                out += ScenarioEvent.Outbound(end)
+                waitingFinalPulse = true
+                out += ScenarioEvent.Info("Waiting final Pulse Value after stop")
             }
             AckKind.END -> {
                 phase = Phase.FINISHED
@@ -95,6 +101,15 @@ class PulseScenarioOrchestrator(
         }
         val bpm = PayloadCodec.parsePulseValue(frame.payload)
         out += ScenarioEvent.Pulse(bpm)
+
+        if (waitingFinalPulse) {
+            waitingFinalPulse = false
+            val end = commands.end()
+            pendingAcks[end.sequence] = AckKind.END
+            out += ScenarioEvent.Outbound(end)
+            return
+        }
+
         pulsesReceived += 1
         if (!stopRequested && pulsesReceived >= autoStopAfterPulses) {
             out += sendStopPulse()

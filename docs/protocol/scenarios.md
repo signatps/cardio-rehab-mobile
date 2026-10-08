@@ -23,13 +23,17 @@ Opis: wykonanie pomiaru EKG i utworzenie pliku SCP; **wysłanie SCP** następuje
 
 1. App → `Init 0x04`
 2. Device → `ACK 0x01` (start zapisu)
-3. App → `ECG Offline 0x05` (czas bufora wstecznego + czas pomiaru; bufor ≤ czas pomiaru; bufor krótszy niż czas od startu zapisu do Init)
+3. App → `ECG Offline 0x05` — firmware: **`total > lookback`** oraz **`rng_msgs >= lookback`**
+   - zaraz po Init bufor ≈ 0 → używamy **`lookback=0`, `total=10`**
+   - `lookback=5` zaraz po Init → CmdError `0x05 NOT ENOUGH … BUFFER` (log tabletu)
 4. Device → `ACK 0x01`, zbiera dane na SCP
-5. Device → `ECG Offline Done 0x06`
-6. App → `End 0x12`
+5. Device → `ECG Offline Done 0x06` (po ~`total-lookback` s)
+6. App → `End 0x12` (czyści `app_init_flag`)
 7. Device → `ACK 0x01`
-8. App → `Init 0x04` ponownie (restart zapisu)
+8. App → `Init 0x04` ponownie
+
+Przy błędzie Offline app **musi** wysłać `End`, inaczej kolejne Init → `APP INIT ALREADY SET`.
 
 Kod: `EcgOfflineCreateOrchestrator`.
 
-Pobieranie SCP (`Get SCP Info` / `Get SCP` / fragmenty / `SCP Done`) — osobny scenariusz po reconnect; nadal wspierany w `OfflineSessionOrchestrator` (BPMN).
+Pobieranie SCP — osobny flow po reconnect (`OfflineSessionOrchestrator`).
