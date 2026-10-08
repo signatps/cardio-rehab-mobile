@@ -23,6 +23,12 @@ data class ArchivedRehabSession(
     val title: String,
     val startedAtMs: Long,
     val ecgs: List<ArchivedEcgSlot>,
+    /** Podsumowanie ciśnienia z kwalifikacji (np. „128/82 · 72/min”). */
+    val bloodPressureSummary: String? = null,
+    /** Podsumowanie wagi (np. „78.2 kg”) — null gdy pominięto. */
+    val weightSummary: String? = null,
+    /** Wynik ankiety: true = pass, false = fail, null = brak. */
+    val surveyPassed: Boolean? = null,
 )
 
 /** Archiwum sesji rehab z listą zapisanych EKG (zakładka EKG). */
@@ -42,6 +48,9 @@ class RehabSessionArchive(
         entries: List<SessionEcgEntry>,
         startedAtMs: Long,
         title: String = "Sesja rehabilitacji",
+        bloodPressureSummary: String? = null,
+        weightSummary: String? = null,
+        surveyPassed: Boolean? = null,
     ): ArchivedRehabSession? {
         if (entries.isEmpty()) return null
         val nextNum = (sessions.maxOfOrNull { it.sessionNumber } ?: 0) + 1
@@ -58,6 +67,9 @@ class RehabSessionArchive(
                     capturedAtMs = e.capturedAtMs,
                 )
             },
+            bloodPressureSummary = bloodPressureSummary,
+            weightSummary = weightSummary,
+            surveyPassed = surveyPassed,
         )
         sessions = sessions + archived
         persist()
@@ -66,17 +78,17 @@ class RehabSessionArchive(
 
     /** Gdy brak zarchiwizowanych sesji — pogrupuj istniejące pliki SCP w demo-sesje. */
     fun ensureSeedFromRecordings() {
+        migrateLabelsAndSeedExtras()
         if (sessions.isNotEmpty()) return
         val files = recordingStore.list()
         if (files.isEmpty()) {
-            // Puste placeholdery — użytkownik zobaczy numery po pierwszej sesji.
             return
         }
         val labels = listOf(
-            "EKG spoczynkowe",
-            "EKG szczyt 1",
-            "EKG szczyt 2",
-            "EKG po wysiłku",
+            "EKG kwalifikacyjne (przed sesją)",
+            "EKG spoczynkowe (start treningu)",
+            "EKG szczyt wysiłku 1/2",
+            "EKG szczyt wysiłku 2/2",
         )
         sessions = files.chunked(4).take(6).mapIndexed { index, chunk ->
             ArchivedRehabSession(
@@ -92,13 +104,52 @@ class RehabSessionArchive(
                         capturedAtMs = rec.modifiedAtMs,
                     )
                 },
+                bloodPressureSummary = "128/82 · 72/min",
+                weightSummary = "78.2 kg",
+                surveyPassed = true,
             )
         }
         persist()
     }
 
+    /** Migracja etykiet + uzupełnienie vitals/ankiety, gdy stara sesja ich nie miała. */
+    private fun migrateLabelsAndSeedExtras() {
+        if (sessions.isEmpty()) return
+        var changed = false
+        sessions = sessions.map { s ->
+            var sessionChanged = false
+            val newEcgs = s.ecgs.map { e ->
+                val migrated = migrateEcgLabel(e.label)
+                if (migrated != e.label) {
+                    sessionChanged = true
+                    e.copy(label = migrated)
+                } else {
+                    e
+                }
+            }
+            val needsExtras = s.bloodPressureSummary == null &&
+                s.weightSummary == null &&
+                s.surveyPassed == null
+            if (needsExtras) {
+                changed = true
+                s.copy(
+                    ecgs = newEcgs,
+                    bloodPressureSummary = "128/82 · 72/min",
+                    weightSummary = "78.2 kg",
+                    surveyPassed = true,
+                )
+            } else if (sessionChanged) {
+                changed = true
+                s.copy(ecgs = newEcgs)
+            } else {
+                s
+            }
+        }
+        if (changed) persist()
+    }
+
     fun sessionDateLabel(session: ArchivedRehabSession): String =
-        SimpleDateFormat("d.MM.yyyy HH:mm", Locale("pl")).format(Date(session.startedAtMs))
+        SimpleDateFormat("d.MM.yyyy HH:mm", Locale.forLanguageTag("pl-PL")).format(Date(session.startedAtMs))
 
     private fun persist() {
         val arr = JSONArray()
@@ -109,6 +160,9 @@ class RehabSessionArchive(
                     .put("sessionNumber", s.sessionNumber)
                     .put("title", s.title)
                     .put("startedAtMs", s.startedAtMs)
+                    .put("bloodPressureSummary", s.bloodPressureSummary)
+                    .put("weightSummary", s.weightSummary)
+                    .put("surveyPassed", s.surveyPassed)
                     .put(
                         "ecgs",
                         JSONArray().also { eArr ->
@@ -142,12 +196,16 @@ class RehabSessionArchive(
                             add(
                                 ArchivedEcgSlot(
                                     id = e.getString("id"),
-                                    label = e.getString("label"),
+                                    label = migrateEcgLabel(e.getString("label")),
                                     fileName = e.getString("fileName"),
                                     capturedAtMs = e.optLong("capturedAtMs"),
                                 ),
                             )
                         }
+                    }
+                    val surveyPassed = when {
+                        !o.has("surveyPassed") || o.isNull("surveyPassed") -> null
+                        else -> o.getBoolean("surveyPassed")
                     }
                     add(
                         ArchivedRehabSession(
@@ -156,6 +214,11 @@ class RehabSessionArchive(
                             title = o.optString("title", "Sesja rehabilitacji"),
                             startedAtMs = o.getLong("startedAtMs"),
                             ecgs = ecgs,
+                            bloodPressureSummary = o.optString("bloodPressureSummary", null)
+                                ?.takeIf { it.isNotBlank() && it != "null" },
+                            weightSummary = o.optString("weightSummary", null)
+                                ?.takeIf { it.isNotBlank() && it != "null" },
+                            surveyPassed = surveyPassed,
                         ),
                     )
                 }
@@ -166,5 +229,25 @@ class RehabSessionArchive(
     companion object {
         private const val PREFS = "rehab_session_archive"
         private const val KEY = "sessions_v1"
+
+        /** Stare etykiety → kwalifikacja. */
+        fun migrateEcgLabel(label: String): String = when {
+            label.contains("przed sesją", ignoreCase = true) &&
+                !label.contains("kwalifik", ignoreCase = true) ->
+                "EKG kwalifikacyjne (przed sesją)"
+            label.equals("EKG spoczynkowe", ignoreCase = true) ->
+                "EKG kwalifikacyjne (przed sesją)"
+            else -> label
+        }
+
+        fun isQualificationEcg(label: String): Boolean {
+            val l = label.lowercase()
+            return "kwalifik" in l || "przed sesją" in l || "przed sesja" in l
+        }
+
+        fun isRestStartEcg(label: String): Boolean {
+            val l = label.lowercase()
+            return "start treningu" in l || ("spoczynk" in l && !isQualificationEcg(label))
+        }
     }
 }

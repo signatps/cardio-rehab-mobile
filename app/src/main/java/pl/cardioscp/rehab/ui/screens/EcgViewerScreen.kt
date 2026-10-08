@@ -71,6 +71,8 @@ data class EcgViewerBrowserMeta(
     val sessionNumber: Int,
     val cycle: Int?,
     val capturedAtMs: Long,
+    /** Gdy ustawione — zamiast etykiety cyklu (np. „kwalifikacja do treningu”). */
+    val phaseLabel: String? = null,
 )
 
 @Composable
@@ -308,7 +310,7 @@ private fun browserMetaLine(
     val pl = java.util.Locale.forLanguageTag("pl-PL")
     val whenLabel = java.text.SimpleDateFormat("d.MM.yyyy HH:mm", pl)
         .format(java.util.Date(meta.capturedAtMs))
-    val cycleLabel = when (meta.cycle) {
+    val phase = meta.phaseLabel ?: when (meta.cycle) {
         null -> "cykl —"
         0 -> "spoczynek"
         else -> "cykl ${meta.cycle}"
@@ -317,7 +319,7 @@ private fun browserMetaLine(
         pl,
         "Sesja %d · %s · %s · %.1f s · %d Hz · %d mm/mV",
         meta.sessionNumber,
-        cycleLabel,
+        phase,
         whenLabel,
         recording.durationSeconds,
         recording.samplingHz,

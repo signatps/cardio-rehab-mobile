@@ -363,9 +363,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun markTodayRehabSessionDone() {
         val live = rehabEngine.state.value
         if (live != null && live.ecgEntries.isNotEmpty()) {
+            val surveyOutcome = pl.cardioscp.rehab.session.DefaultRehabSurvey.evaluate(live.surveyAnswers)
             sessionArchive.archiveFromLiveSession(
                 entries = live.ecgEntries,
                 startedAtMs = live.startedAtMs,
+                bloodPressureSummary = live.vitals.bloodPressure?.summary,
+                weightSummary = live.vitals.weight?.summary,
+                surveyPassed = when (surveyOutcome) {
+                    pl.cardioscp.rehab.session.SurveyOutcome.PASS -> true
+                    pl.cardioscp.rehab.session.SurveyOutcome.DISQUALIFIED -> false
+                    pl.cardioscp.rehab.session.SurveyOutcome.INCOMPLETE -> null
+                },
             )
             refreshEcgArchive()
         }

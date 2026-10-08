@@ -83,7 +83,7 @@ class RehabSessionEngine(
         }
         scope.launch {
             val result = acquireEcg(
-                label = "EKG spoczynkowe (przed sesją)",
+                label = "EKG kwalifikacyjne (przed sesją)",
                 totalSeconds = s.trainingPlan.acquireSec,
             )
             result.fold(
@@ -92,7 +92,7 @@ class RehabSessionEngine(
                         it.copy(
                             busy = false,
                             statusMessage = "Zapisano ${rec.displayName}",
-                            ecgEntries = it.ecgEntries + SessionEcgEntry("EKG spoczynkowe (przed sesją)", rec),
+                            ecgEntries = it.ecgEntries + SessionEcgEntry("EKG kwalifikacyjne (przed sesją)", rec),
                             step = RehabStep.VITALS_BP,
                         )
                     }
