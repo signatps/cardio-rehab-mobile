@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import pl.cardioscp.rehab.ble.BleMeasureController
 import pl.cardioscp.rehab.bluetooth.BluetoothPermissionHelper
 import pl.cardioscp.rehab.bluetooth.BondedEcgDevice
 import pl.cardioscp.rehab.bluetooth.EhoMiniConnectionState
@@ -18,6 +19,10 @@ import pl.cardioscp.rehab.scp.ScpEcgParser
 import pl.cardioscp.rehab.scp.ScpEcgRecording
 import pl.cardioscp.rehab.scp.ScpRecording
 import pl.cardioscp.rehab.scp.ScpRecordingStore
+import pl.cardioscp.rehab.session.RehabSessionEngine
+import pl.cardioscp.rehab.session.RehabSessionState
+import pl.cardioscp.rehab.session.SessionEcgEntry
+import pl.cardioscp.rehab.session.TrainingPlan
 
 data class HomeUiState(
     val connection: EhoMiniConnectionState = EhoMiniConnectionState.Idle,
@@ -34,6 +39,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val deviceClient = SppEhoMiniDeviceClient(application)
     private val sessionController = ProtocolSessionController(deviceClient, viewModelScope)
     private val recordingStore = ScpRecordingStore(application)
+    val bleMeasure = BleMeasureController(application)
+
+    private val rehabEngine = RehabSessionEngine(
+        scope = viewModelScope,
+        deviceClient = deviceClient,
+        sessionController = sessionController,
+        recordingStore = recordingStore,
+        bleMeasure = bleMeasure,
+        userIdProvider = {
+            val connected = deviceClient.connectionState.value as? EhoMiniConnectionState.Connected
+            bondedDevices.value
+                .firstOrNull { it.address == connected?.address }
+                ?.serialSuffix
+                ?: connected?.deviceName?.takeLast(6)
+                ?: "000000"
+        },
+        onOpenViewer = { openRecording(it) },
+    )
+    val rehabSession: StateFlow<RehabSessionState?> = rehabEngine.state
 
     private val permissionsOk = MutableStateFlow(
         BluetoothPermissionHelper.hasAllPermissions(application),
@@ -147,6 +171,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             sessionController.lastScpBytes.collect { bytes ->
                 if (bytes == null) return@collect
+                // Sesja rehabilitacji sama zapisuje SCP slotów treningowych.
+                if (rehabEngine.suppressAutoViewer) {
+                    recordings.value = recordingStore.list()
+                    return@collect
+                }
                 val serial = (deviceClient.connectionState.value as? EhoMiniConnectionState.Connected)
                     ?.deviceName
                     ?.takeLast(6)
@@ -164,6 +193,37 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         refreshPermissions()
+    }
+
+    fun startRehabSession(includeWeight: Boolean = true) {
+        rehabEngine.start(
+            includeWeight = includeWeight,
+            plan = TrainingPlan(
+                cycles = 3,
+                exerciseSec = 60,
+                restSec = 60,
+                acquireSec = 10,
+                acquireLeadSec = 0,
+                postTrainingSec = 120,
+            ),
+        )
+        rehabEngine.beginBaselineEcg()
+    }
+
+    fun cancelRehabSession() = rehabEngine.cancel()
+    fun beginBaselineEcg() = rehabEngine.beginBaselineEcg()
+    fun retryBpMeasure() = rehabEngine.startBpMeasure()
+    fun retryWeightMeasure() = rehabEngine.startWeightMeasure()
+    fun skipWeight() = rehabEngine.skipWeight()
+    fun answerSurvey(questionId: String, yes: Boolean) = rehabEngine.answerSurvey(questionId, yes)
+    fun submitSurvey() = rehabEngine.submitSurvey()
+    fun finishDisqualified() = rehabEngine.finishDisqualified()
+    fun reportEcgEvent() = rehabEngine.reportEcgEvent()
+    fun confirmEcgEvent(endTraining: Boolean) = rehabEngine.confirmEventAction(endTraining)
+    fun dismissEcgEvent() = rehabEngine.dismissEventPause()
+    fun openSessionEcg(entry: SessionEcgEntry) {
+        rehabEngine.openSessionEcg(entry)
+        _openViewerRequest.value = _openViewerRequest.value + 1
     }
 
     fun refreshPermissions() {
@@ -273,5 +333,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (deviceClient.connectionState.value is EhoMiniConnectionState.Error) {
             viewModelScope.launch { deviceClient.disconnect() }
         }
+    }
+
+    override fun onCleared() {
+        bleMeasure.release()
+        rehabEngine.cancel()
+        super.onCleared()
     }
 }

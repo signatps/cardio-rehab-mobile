@@ -8,7 +8,11 @@ Repozytorium: [signatps/cardio-rehab-mobile](https://github.com/signatps/cardio-
 
 ## Status
 
-Działa połączenie **Bluetooth Classic SPP** z `PRO_PLUS_ECG_******`, scenariusze protokołu Silvermedia/EHO-MINI:
+Działa połączenie **Bluetooth Classic SPP** z `PRO_PLUS_ECG_******` oraz **BLE** do ciśnienia/wagi (port z mobile-DSD).
+
+**Sesja rehabilitacji** (po SPP): EKG spoczynkowe → ciśnienie BLE → waga BLE (gdy HF) → ankieta kwalifikacyjna → trening sekwencyjny interwałowy (domyślnie 3×1 min wysiłek / 1 min odpoczynek, akwizycje EKG wg schematu + 2 min po) → podsumowanie z przeglądem EKG z sesji.
+
+Scenariusze ręczne:
 
 1. **Puls** (`Get Pulse` → `Pulse Value`) — BPM na ekranie (wymaga podłączonych elektrod; przy odpięciu urządzenie raportuje 0)
 2. **ECG Offline** — zapis pliku SCP na urządzeniu

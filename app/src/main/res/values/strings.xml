@@ -30,6 +30,7 @@
     <string name="permissions_needed">Wymagane uprawnienia Bluetooth</string>
     <string name="permissions_rationale">Aplikacja potrzebuje Bluetooth, aby otworzyć kanał SPP do rejestratora EKG.</string>
     <string name="grant_permissions">Udziel uprawnień</string>
-    <string name="session_placeholder">Po SPP: scenariusz 2 (puls), 3 (zapis SCP na urządzeniu), potem pobranie całego pliku i podgląd przebiegu. Puls wymaga podłączonych elektrod.</string>
+    <string name="start_rehab_session">Sesja rehabilitacji</string>
+    <string name="session_placeholder">Po SPP: „Sesja rehabilitacji” (EKG → ciśnienie/waga BLE → ankieta → trening sekwencyjny → podsumowanie) albo ręczne scenariusze 2/3 i pobranie SCP.</string>
     <string name="protocol_ready_hint">Sparuj PRO_PLUS_ECG_****** w ustawieniach BT, potem Połącz.</string>
 </resources>

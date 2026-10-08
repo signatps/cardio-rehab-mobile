@@ -101,7 +101,7 @@ class ProtocolSessionController(
         }
     }
 
-    fun startEcgOfflineCreateScenario(userId: String) {
+    fun startEcgOfflineCreateScenario(userId: String, totalSeconds: Int = 10) {
         scope.launch {
             prepareDevice()
             val orch = EcgOfflineCreateOrchestrator(commands = commands)
@@ -125,7 +125,7 @@ class ProtocolSessionController(
                         samplingHz = 250,
                         pulseAverageSeconds = 10,
                         lookbackSeconds = 0,
-                        totalSeconds = 10,
+                        totalSeconds = totalSeconds.coerceAtLeast(2),
                         userId = userId,
                         reinitAfterEnd = false,
                     ),

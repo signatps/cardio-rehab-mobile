@@ -13,12 +13,14 @@ import pl.cardioscp.rehab.ui.screens.EcgViewerScreen
 import pl.cardioscp.rehab.ui.screens.HomeScreen
 import pl.cardioscp.rehab.ui.screens.HomeViewModel
 import pl.cardioscp.rehab.ui.screens.RecordingsScreen
+import pl.cardioscp.rehab.ui.screens.session.RehabSessionScreen
 
 object Routes {
     const val SPLASH = "splash"
     const val HOME = "home"
     const val RECORDINGS = "recordings"
     const val ECG_VIEWER = "ecg_viewer"
+    const val REHAB_SESSION = "rehab_session"
 }
 
 @Composable
@@ -56,6 +58,20 @@ fun CardioRehabNavHost(
                 onOpenRecordings = {
                     viewModel.refreshRecordings()
                     navController.navigate(Routes.RECORDINGS)
+                },
+                onOpenRehabSession = {
+                    navController.navigate(Routes.REHAB_SESSION)
+                },
+            )
+        }
+        composable(Routes.REHAB_SESSION) {
+            RehabSessionScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onOpenEcg = {
+                    navController.navigate(Routes.ECG_VIEWER) {
+                        launchSingleTop = true
+                    }
                 },
             )
         }

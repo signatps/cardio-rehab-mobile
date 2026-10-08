@@ -50,6 +50,7 @@ import pl.cardioscp.rehab.ui.theme.SoftMint
 fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
     onOpenRecordings: () -> Unit = {},
+    onOpenRehabSession: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -219,6 +220,13 @@ fun HomeScreen(
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = onOpenRehabSession,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.start_rehab_session))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = viewModel::onStartPulseScenario,
                             modifier = Modifier.fillMaxWidth(),
