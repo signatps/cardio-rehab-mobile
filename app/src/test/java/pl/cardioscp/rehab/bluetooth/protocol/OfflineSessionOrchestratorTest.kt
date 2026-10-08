@@ -19,7 +19,7 @@ class OfflineSessionOrchestratorTest {
             OfflineSessionOrchestrator.Config(
                 unixTimestampSeconds = 1_700_000_000L,
                 ecgJobs = listOf(
-                    OfflineSessionOrchestrator.EcgJob(lookbackSeconds = 10, totalSeconds = 10, userId = "u1"),
+                    OfflineSessionOrchestrator.EcgJob(lookbackSeconds = 0, totalSeconds = 10, userId = "u1"),
                 ),
             ),
         )

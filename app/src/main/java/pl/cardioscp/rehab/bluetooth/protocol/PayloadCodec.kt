@@ -46,7 +46,10 @@ object PayloadCodec {
     fun ecgOffline(lookbackSeconds: Int, totalSeconds: Int, userIdUtf8: String): ByteArray {
         require(lookbackSeconds in 0..255)
         require(totalSeconds in 0..255)
-        require(lookbackSeconds <= totalSeconds) { "lookback cannot exceed total measurement time" }
+        // Firmware: measure_time > back_time (strict), else device error.
+        require(lookbackSeconds < totalSeconds) {
+            "firmware requires totalSeconds > lookbackSeconds"
+        }
         val uid = userIdUtf8.toByteArray(StandardCharsets.UTF_8)
         require(uid.size <= 255)
         return byteArrayOf(

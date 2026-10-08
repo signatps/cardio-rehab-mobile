@@ -7,8 +7,8 @@ import org.junit.Test
 class PayloadCodecTest {
     @Test
     fun ecgOffline_encodesUid() {
-        val payload = PayloadCodec.ecgOffline(255, 255, "ab")
-        assertEquals(0xFF.toByte(), payload[0])
+        val payload = PayloadCodec.ecgOffline(254, 255, "ab")
+        assertEquals(254.toByte(), payload[0])
         assertEquals(0xFF.toByte(), payload[1])
         assertEquals(2.toByte(), payload[2])
         assertEquals('a'.code.toByte(), payload[3])
