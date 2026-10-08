@@ -58,6 +58,23 @@ class ClinicDemoStore {
         }
     }
 
+    /** Po ukończeniu treningu — sesja dzisiejsza nie wraca w powitaniu głosowym. */
+    fun markTodayRehabSessionDone() {
+        sessions = sessions.map {
+            if (it.date == today &&
+                it.kind == PlannedSessionKind.REHAB_INTERVAL &&
+                it.status == PlannedSessionStatus.SCHEDULED
+            ) {
+                it.copy(status = PlannedSessionStatus.DONE)
+            } else {
+                it
+            }
+        }
+        dayPlan = dayPlan.map {
+            if (it.id == "session") it.copy(done = true) else it
+        }
+    }
+
     fun sessionsInMonth(yearMonth: java.time.YearMonth): List<PlannedSession> =
         sessions.filter { java.time.YearMonth.from(it.date) == yearMonth }
 

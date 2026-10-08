@@ -15,9 +15,11 @@ import pl.cardioscp.rehab.bluetooth.BondedEcgDevice
 import pl.cardioscp.rehab.bluetooth.EhoMiniConnectionState
 import pl.cardioscp.rehab.bluetooth.ProtocolSessionController
 import pl.cardioscp.rehab.bluetooth.SppEhoMiniDeviceClient
+import pl.cardioscp.rehab.CardioRehabApp
 import pl.cardioscp.rehab.clinic.ClinicDemoStore
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
 import pl.cardioscp.rehab.clinic.VitalKind
+import pl.cardioscp.rehab.clinic.WelcomePhrase
 import pl.cardioscp.rehab.scp.ScpEcgParser
 import pl.cardioscp.rehab.scp.ScpEcgRecording
 import pl.cardioscp.rehab.scp.ScpRecording
@@ -47,6 +49,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val clinicStore = ClinicDemoStore()
     private val _clinic = MutableStateFlow(clinicStore.snapshot())
     val clinic: StateFlow<ClinicSnapshot> = _clinic
+
+    private var dayPlanWelcomeSpoken = false
+    private val voiceGreeting
+        get() = (getApplication<Application>() as? CardioRehabApp)?.voiceGreeting
 
     private val rehabEngine = RehabSessionEngine(
         scope = viewModelScope,
@@ -257,6 +263,29 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refreshClinic() {
+        _clinic.value = clinicStore.snapshot()
+    }
+
+    /** Podgrzewa TTS (np. na splashu). */
+    fun warmVoiceGreeting() {
+        voiceGreeting?.warmUp()
+    }
+
+    /**
+     * Powitanie głosowe z pulpitu — raz na sesję aplikacji.
+     * Gdy dzisiejsza sesja rehab jest już DONE, mówi tylko o lekach.
+     */
+    fun speakDayPlanWelcome() {
+        if (dayPlanWelcomeSpoken) return
+        dayPlanWelcomeSpoken = true
+        val phrase = WelcomePhrase.buildFromClinic(_clinic.value)
+        voiceGreeting?.warmUp()
+        voiceGreeting?.speak(phrase)
+    }
+
+    /** Po zakończonej sesji rehab — kolejne powitanie nie przypomina o treningu. */
+    fun markTodayRehabSessionDone() {
+        clinicStore.markTodayRehabSessionDone()
         _clinic.value = clinicStore.snapshot()
     }
     fun skipWeight() = rehabEngine.skipWeight()

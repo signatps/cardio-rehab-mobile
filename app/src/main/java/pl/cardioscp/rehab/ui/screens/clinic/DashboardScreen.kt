@@ -23,6 +23,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
 import pl.cardioscp.rehab.clinic.VitalKind
+import pl.cardioscp.rehab.clinic.WelcomePhrase
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import java.time.format.DateTimeFormatter
 
@@ -41,13 +43,19 @@ fun DashboardScreen(
     onOpenDayPlan: () -> Unit,
     onOpenMeds: () -> Unit,
     onOpenMeasurements: () -> Unit,
+    onSpeakWelcome: () -> Unit = {},
 ) {
+    LaunchedEffect(Unit) {
+        onSpeakWelcome()
+    }
+
     val bp = clinic.measurements.firstOrNull { it.kind == VitalKind.BLOOD_PRESSURE }
     val weight = clinic.measurements.firstOrNull { it.kind == VitalKind.WEIGHT }
     val pulseText = livePulseBpm?.let { "$it bpm" }
         ?: clinic.measurements.firstOrNull { it.kind == VitalKind.PULSE }?.valueText
         ?: "—"
     val pendingDoses = clinic.todayDoses.count { it.status.name == "PENDING" }
+    val welcomeHint = WelcomePhrase.buildFromClinic(clinic)
     val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
     Column(
@@ -61,13 +69,19 @@ fun DashboardScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(Modifier.weight(1f)) {
                 Text("Witaj", style = MaterialTheme.typography.titleMedium, color = ProPlusColors.Muted)
                 Text(
                     clinic.patientName,
                     style = MaterialTheme.typography.headlineMedium,
                     color = ProPlusColors.Navy,
                     fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    welcomeHint.removePrefix("Witaj ${WelcomePhrase.firstName(clinic.patientName)}. ").trim(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ProPlusColors.Muted,
+                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
             OutlinedButton(onClick = onOpenMeds) {

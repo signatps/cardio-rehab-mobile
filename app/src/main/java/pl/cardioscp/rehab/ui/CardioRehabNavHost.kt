@@ -55,6 +55,7 @@ fun CardioRehabNavHost(
 
     NavHost(navController = navController, startDestination = Routes.SPLASH) {
         composable(Routes.SPLASH) {
+            LaunchedEffect(Unit) { viewModel.warmVoiceGreeting() }
             BrandSplashScreen(
                 onFinished = {
                     navController.navigate(Routes.MAIN) {
@@ -89,6 +90,7 @@ fun CardioRehabNavHost(
                         onOpenDayPlan = { destination = AppDestination.DAY_PLAN.name },
                         onOpenMeds = { destination = AppDestination.MEDS.name },
                         onOpenMeasurements = { destination = AppDestination.MEASUREMENTS.name },
+                        onSpeakWelcome = viewModel::speakDayPlanWelcome,
                     )
                     AppDestination.SESSIONS -> SessionsCalendarScreen(
                         clinic = clinic,

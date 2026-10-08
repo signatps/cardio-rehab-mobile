@@ -277,6 +277,7 @@ fun RehabSessionScreen(
                     onOpenEcg()
                 },
                 onDone = {
+                    viewModel.markTodayRehabSessionDone()
                     viewModel.cancelRehabSession()
                     onBack()
                 },
