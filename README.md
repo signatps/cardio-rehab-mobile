@@ -13,6 +13,7 @@ Działa połączenie **Bluetooth Classic SPP** z `PRO_PLUS_ECG_******`, scenariu
 1. **Puls** (`Get Pulse` → `Pulse Value`) — BPM na ekranie (wymaga podłączonych elektrod; przy odpięciu urządzenie raportuje 0)
 2. **ECG Offline** — zapis pliku SCP na urządzeniu
 3. **Pobierz cały plik SCP** — złożenie wszystkich fragmentów `0x0A` w jeden `.scp`, zapis lokalny i podgląd przebiegu
+4. **Przeglądarka EKG** — papier milimetrowy z CardioSCP-mobile (`EcgPaper`: cecha 1 mV, 25/50 mm/s, 5/10/20 mm/mV, kolory odprowadzeń, PQRST) oraz analiza (`EcgAnalysisEngine`: QRS, HR, PQ/QRS/QT/QTc, ST, oś)
 
 ## Stack
 

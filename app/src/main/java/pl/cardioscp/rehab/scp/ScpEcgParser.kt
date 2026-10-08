@@ -6,9 +6,12 @@ import java.nio.ByteOrder
 data class ScpLeadWaveform(
     val leadId: Int,
     val label: String,
-    /** Signed sample values from section 6 (nV units ≈ AVM × sample). */
+    /** Raw signed samples from section 6; physical unit = sample × AVM nV. */
     val samples: ShortArray,
 ) {
+    fun sampleMv(index: Int, avmNvPerLsb: Int): Float =
+        EcgScale.sampleToMv(samples[index].toInt(), avmNvPerLsb)
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is ScpLeadWaveform) return false
@@ -25,6 +28,7 @@ data class ScpLeadWaveform(
 
 data class ScpEcgRecording(
     val fileSize: Int,
+    /** Amplitude Value Multiplier in nanovolts / LSB (EN 1064 §5.9). */
     val avm: Int,
     /** Sample period in microseconds. */
     val samplePeriodUs: Int,
@@ -36,6 +40,9 @@ data class ScpEcgRecording(
             val n = leads.maxOfOrNull { it.samples.size } ?: 0
             return if (samplingHz <= 0) 0.0 else n.toDouble() / samplingHz
         }
+
+    /** µV per LSB — handy for UI labels. */
+    val uvPerLsb: Float get() = avm / 1000f
 }
 
 /**
