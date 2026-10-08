@@ -8,9 +8,11 @@ Repozytorium: [signatps/cardio-rehab-mobile](https://github.com/signatps/cardio-
 
 ## Status
 
-Faza **M0 — Bootstrap**: szkielet Compose, uprawnienia Bluetooth, stub klienta EHO-Mini, CI i workflow issues.
+Działa połączenie **Bluetooth Classic SPP** z `PRO_PLUS_ECG_******`, scenariusze protokołu Silvermedia/EHO-MINI:
 
-Sterowanie urządzeniem zostanie podpięte po dostarczeniu **wsadu / dokumentacji protokołu**.
+1. **Puls** (`Get Pulse` → `Pulse Value`) — BPM na ekranie (wymaga podłączonych elektrod; przy odpięciu urządzenie raportuje 0)
+2. **ECG Offline** — zapis pliku SCP na urządzeniu
+3. **Pobierz cały plik SCP** — złożenie wszystkich fragmentów `0x0A` w jeden `.scp`, zapis lokalny i podgląd przebiegu
 
 ## Stack
 

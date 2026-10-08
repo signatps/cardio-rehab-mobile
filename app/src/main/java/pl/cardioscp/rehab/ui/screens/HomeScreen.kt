@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.BluetoothSearching
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -47,6 +49,7 @@ import pl.cardioscp.rehab.ui.theme.SoftMint
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
+    onOpenRecordings: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -67,8 +70,9 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 40.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             AnimatedVisibility(
@@ -166,12 +170,35 @@ fun HomeScreen(
                             textAlign = TextAlign.Center,
                             color = DeepTeal,
                         )
-                        state.lastPulseBpm?.let { bpm ->
+
+                        // Always reserve pulse panel once scenario may run — show 0 too.
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = when (val bpm = state.lastPulseBpm) {
+                                null -> stringResource(R.string.pulse_waiting)
+                                else -> stringResource(R.string.pulse_bpm, bpm)
+                            },
+                            style = MaterialTheme.typography.displayLarge,
+                            color = Seafoam,
+                            textAlign = TextAlign.Center,
+                        )
+                        if (state.pulseSampleCount > 0) {
+                            Text(
+                                text = stringResource(
+                                    R.string.pulse_samples,
+                                    state.pulseSampleCount,
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                            )
+                        }
+                        state.electrodeWarning?.let { warn ->
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = stringResource(R.string.pulse_bpm, bpm),
-                                style = MaterialTheme.typography.titleLarge,
-                                color = Seafoam,
+                                text = warn,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.tertiary,
                             )
                         }
                         state.sessionLabel?.let { label ->
@@ -180,6 +207,15 @@ fun HomeScreen(
                                 text = label,
                                 style = MaterialTheme.typography.bodyMedium,
                                 textAlign = TextAlign.Center,
+                            )
+                        }
+                        state.lastSavedScpName?.let { name ->
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.scp_saved, name),
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center,
+                                color = DeepTeal,
                             )
                         }
                         Spacer(modifier = Modifier.height(16.dp))
@@ -195,6 +231,20 @@ fun HomeScreen(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(stringResource(R.string.scenario_ecg_offline))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = viewModel::onDownloadScp,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.download_full_scp))
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onOpenRecordings,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.open_recordings))
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(
@@ -247,6 +297,9 @@ fun HomeScreen(
                         }
                         TextButton(onClick = viewModel::refreshBondedDevices) {
                             Text(stringResource(R.string.refresh_bonded))
+                        }
+                        TextButton(onClick = onOpenRecordings) {
+                            Text(stringResource(R.string.open_recordings))
                         }
                     }
                 }

@@ -14,51 +14,92 @@ import pl.cardioscp.rehab.bluetooth.BondedEcgDevice
 import pl.cardioscp.rehab.bluetooth.EhoMiniConnectionState
 import pl.cardioscp.rehab.bluetooth.ProtocolSessionController
 import pl.cardioscp.rehab.bluetooth.SppEhoMiniDeviceClient
+import pl.cardioscp.rehab.scp.ScpEcgParser
+import pl.cardioscp.rehab.scp.ScpEcgRecording
+import pl.cardioscp.rehab.scp.ScpRecording
+import pl.cardioscp.rehab.scp.ScpRecordingStore
 
 data class HomeUiState(
     val connection: EhoMiniConnectionState = EhoMiniConnectionState.Idle,
     val bondedDevices: List<BondedEcgDevice> = emptyList(),
     val lastPulseBpm: Int? = null,
+    val pulseSampleCount: Int = 0,
+    val electrodeWarning: String? = null,
     val sessionLabel: String? = null,
+    val recordings: List<ScpRecording> = emptyList(),
+    val lastSavedScpName: String? = null,
 )
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val deviceClient = SppEhoMiniDeviceClient(application)
     private val sessionController = ProtocolSessionController(deviceClient, viewModelScope)
+    private val recordingStore = ScpRecordingStore(application)
 
     private val permissionsOk = MutableStateFlow(
         BluetoothPermissionHelper.hasAllPermissions(application),
     )
     private val bondedDevices = MutableStateFlow<List<BondedEcgDevice>>(emptyList())
-    private val lastPulseBpm = MutableStateFlow<Int?>(null)
     private val localError = MutableStateFlow<String?>(null)
     private val sessionLabel = MutableStateFlow<String?>(null)
+    private val recordings = MutableStateFlow(recordingStore.list())
+    private val lastSavedScpName = MutableStateFlow<String?>(null)
+
+    private val _viewerRecording = MutableStateFlow<ScpEcgRecording?>(null)
+    val viewerRecording: StateFlow<ScpEcgRecording?> = _viewerRecording
+    private val _viewerError = MutableStateFlow<String?>(null)
+    val viewerError: StateFlow<String?> = _viewerError
+    private val _viewerTitle = MutableStateFlow("EKG")
+    val viewerTitle: StateFlow<String> = _viewerTitle
+
+    private val connectionSlice = combine(
+        deviceClient.connectionState,
+        permissionsOk,
+        bondedDevices,
+    ) { connection, granted, bonded ->
+        Triple(connection, granted, bonded)
+    }
+
+    private val pulseSlice = combine(
+        sessionController.lastPulseBpm,
+        sessionController.pulseSampleCount,
+        sessionController.electrodeWarning,
+    ) { pulse, count, electrode ->
+        Triple(pulse, count, electrode)
+    }
+
+    private val sessionSlice = combine(
+        localError,
+        sessionLabel,
+        recordings,
+        lastSavedScpName,
+    ) { error, session, recs, saved ->
+        SessionBits(error, session, recs, saved)
+    }
 
     val uiState: StateFlow<HomeUiState> = combine(
-        combine(
-            deviceClient.connectionState,
-            permissionsOk,
-            bondedDevices,
-        ) { connection, granted, bonded -> Triple(connection, granted, bonded) },
-        combine(lastPulseBpm, localError, sessionLabel) { pulse, error, session ->
-            Triple(pulse, error, session)
-        },
-    ) { connPermBonded, pulseErrorSession ->
-        val (connection, granted, bonded) = connPermBonded
-        val (pulse, error, session) = pulseErrorSession
+        connectionSlice,
+        pulseSlice,
+        sessionSlice,
+    ) { conn, pulse, session ->
+        val (connection, granted, bonded) = conn
+        val (bpm, pulseCount, electrode) = pulse
         val effective = when {
             !granted -> EhoMiniConnectionState.PermissionsRequired
-            error != null &&
+            session.error != null &&
                 (connection is EhoMiniConnectionState.Idle ||
                     connection is EhoMiniConnectionState.Error) ->
-                EhoMiniConnectionState.Error(error)
+                EhoMiniConnectionState.Error(session.error)
             else -> connection
         }
         HomeUiState(
             connection = effective,
             bondedDevices = bonded,
-            lastPulseBpm = pulse,
-            sessionLabel = session,
+            lastPulseBpm = bpm,
+            pulseSampleCount = pulseCount,
+            electrodeWarning = electrode,
+            sessionLabel = session.session,
+            recordings = session.recordings,
+            lastSavedScpName = session.savedName,
         )
     }.stateIn(
         viewModelScope,
@@ -69,35 +110,50 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 EhoMiniConnectionState.PermissionsRequired
             },
+            recordings = recordings.value,
         ),
     )
 
+    private data class SessionBits(
+        val error: String?,
+        val session: String?,
+        val recordings: List<ScpRecording>,
+        val savedName: String?,
+    )
+
     init {
-        viewModelScope.launch {
-            deviceClient.incomingFrames.collect { frame ->
-                if (frame.type == pl.cardioscp.rehab.bluetooth.protocol.FrameType.PULSE_VALUE &&
-                    frame.payload.isNotEmpty()
-                ) {
-                    lastPulseBpm.value = frame.payload[0].toInt() and 0xFF
-                }
-            }
-        }
         viewModelScope.launch {
             sessionController.status.collect { status ->
                 sessionLabel.value = when (status) {
                     ProtocolSessionController.Status.Idle -> null
                     is ProtocolSessionController.Status.Running -> when (status.scenario) {
-                        ProtocolSessionController.Scenario.PULSE -> "Scenariusz 2: puls…"
+                        ProtocolSessionController.Scenario.PULSE ->
+                            "Scenariusz 2: odbiór pulsu…"
                         ProtocolSessionController.Scenario.ECG_OFFLINE_CREATE ->
-                            "Scenariusz 3: ECG Offline…"
+                            "Scenariusz 3: zapis ECG Offline na urządzeniu…"
+                        ProtocolSessionController.Scenario.SCP_DOWNLOAD ->
+                            "Pobieranie całego pliku SCP…"
                     }
-                    is ProtocolSessionController.Status.Pulse -> "Puls: ${status.bpm} bpm"
                     is ProtocolSessionController.Status.Info -> status.message
                     is ProtocolSessionController.Status.Failed -> "Sesja: ${status.reason}"
                     ProtocolSessionController.Status.Finished -> "Scenariusz zakończony"
                 }
-                if (status is ProtocolSessionController.Status.Pulse) {
-                    lastPulseBpm.value = status.bpm
+            }
+        }
+        viewModelScope.launch {
+            sessionController.lastScpBytes.collect { bytes ->
+                if (bytes == null) return@collect
+                val serial = (deviceClient.connectionState.value as? EhoMiniConnectionState.Connected)
+                    ?.deviceName
+                    ?.takeLast(6)
+                runCatching {
+                    recordingStore.saveComplete(bytes, serial)
+                }.onSuccess { saved ->
+                    lastSavedScpName.value = saved.displayName
+                    recordings.value = recordingStore.list()
+                    sessionLabel.value = "Zapisano cały SCP: ${saved.displayName}"
+                }.onFailure {
+                    sessionLabel.value = "Błąd zapisu SCP: ${it.message}"
                 }
             }
         }
@@ -120,6 +176,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     localError.value = it.message ?: "Nie udało się odczytać sparowanych urządzeń"
                 }
         }
+    }
+
+    fun refreshRecordings() {
+        recordings.value = recordingStore.list()
     }
 
     fun onConnectClicked() {
@@ -174,6 +234,32 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             ?.serialSuffix
             ?: connected.deviceName.takeLast(6)
         sessionController.startEcgOfflineCreateScenario(userId = userId)
+    }
+
+    fun onDownloadScp() {
+        if (deviceClient.connectionState.value !is EhoMiniConnectionState.Connected) return
+        sessionController.startScpDownload()
+    }
+
+    fun openRecording(recording: ScpRecording) {
+        _viewerTitle.value = recording.displayName
+        _viewerError.value = null
+        _viewerRecording.value = null
+        viewModelScope.launch {
+            runCatching {
+                val bytes = recordingStore.read(recording.file)
+                ScpEcgParser.parse(bytes)
+            }.onSuccess {
+                _viewerRecording.value = it
+            }.onFailure {
+                _viewerError.value = it.message ?: "Nie udało się odczytać SCP"
+            }
+        }
+    }
+
+    fun clearViewer() {
+        _viewerRecording.value = null
+        _viewerError.value = null
     }
 
     fun clearError() {

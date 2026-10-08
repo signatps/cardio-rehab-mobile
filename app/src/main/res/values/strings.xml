@@ -9,6 +9,14 @@
     <string name="disconnect_device">Rozłącz</string>
     <string name="scenario_pulse">Scenariusz 2: Puls</string>
     <string name="scenario_ecg_offline">Scenariusz 3: ECG Offline</string>
+    <string name="download_full_scp">Pobierz cały plik SCP</string>
+    <string name="open_recordings">Zapisane badania EKG</string>
+    <string name="recordings_title">Zapisane SCP</string>
+    <string name="recordings_empty">Brak pobranych plików. Najpierw Scenariusz 3, potem „Pobierz cały plik SCP”.</string>
+    <string name="recording_meta">%1$d B · %2$s</string>
+    <string name="scp_saved">Zapisano: %1$s</string>
+    <string name="pulse_waiting">Puls: —</string>
+    <string name="pulse_samples">Odebrano %1$d wartości Pulse Value</string>
     <string name="refresh_bonded">Odśwież listę sparowanych</string>
     <string name="device_status_idle">Urządzenie niepołączone</string>
     <string name="device_status_scanning">Szukam sparowanych PRO_PLUS_ECG_******…</string>
@@ -22,6 +30,6 @@
     <string name="permissions_needed">Wymagane uprawnienia Bluetooth</string>
     <string name="permissions_rationale">Aplikacja potrzebuje Bluetooth, aby otworzyć kanał SPP do rejestratora EKG.</string>
     <string name="grant_permissions">Udziel uprawnień</string>
-    <string name="session_placeholder">Po SPP wybierz scenariusz 2 (puls) lub 3 (ECG Offline → SCP na urządzeniu).</string>
+    <string name="session_placeholder">Po SPP: scenariusz 2 (puls), 3 (zapis SCP na urządzeniu), potem pobranie całego pliku i podgląd przebiegu. Puls wymaga podłączonych elektrod.</string>
     <string name="protocol_ready_hint">Sparuj PRO_PLUS_ECG_****** w ustawieniach BT, potem Połącz.</string>
 </resources>

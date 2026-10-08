@@ -1,0 +1,63 @@
+package pl.cardioscp.rehab.bluetooth.protocol
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class ScpDownloadOrchestratorTest {
+    @Test
+    fun reassemblesFragmentsIntoSingleCompleteFile() {
+        val orch = ScpDownloadOrchestrator()
+        val events = mutableListOf<ScenarioEvent>()
+
+        fun feed(frame: ProtocolFrame) {
+            events += orch.onFrame(frame)
+        }
+
+        events += orch.start()
+        val getScp = outbound(events).single { it.type == FrameType.GET_SCP }
+        assertTrue(outbound(events).any { it.type == FrameType.GET_SCP_INFO })
+        events.clear()
+
+        feed(ProtocolFrame(FrameType.ACK, getScp.sequence))
+        // size = 5, pad, crc
+        feed(
+            ProtocolFrame(
+                FrameType.SCP_INFO,
+                10,
+                byteArrayOf(5, 0, 0, 0, 0, 0x11, 0x22),
+            ),
+        )
+        events.clear()
+
+        feed(ProtocolFrame(FrameType.SCP_FRAGMENT, 11, byteArrayOf(1, 2)))
+        assertTrue(outbound(events).any { it.type == FrameType.ACK && it.sequence == 11 })
+        assertTrue(events.none { it is ScenarioEvent.ScpFileReady })
+        events.clear()
+
+        feed(ProtocolFrame(FrameType.SCP_FRAGMENT, 12, byteArrayOf(3, 4, 5)))
+        val ready = events.filterIsInstance<ScenarioEvent.ScpFileReady>().single()
+        assertTrue(byteArrayOf(1, 2, 3, 4, 5).contentEquals(ready.bytes))
+        val done = outbound(events).single { it.type == FrameType.SCP_DONE }
+        events.clear()
+
+        feed(ProtocolFrame(FrameType.ACK, done.sequence))
+        assertTrue(events.any { it is ScenarioEvent.Finished })
+        assertEquals(ScpDownloadOrchestrator.Phase.FINISHED, orch.phase)
+    }
+
+    @Test
+    fun missingScp_commandError04() {
+        val orch = ScpDownloadOrchestrator()
+        val events = mutableListOf<ScenarioEvent>()
+        events += orch.start()
+        events.clear()
+        events += orch.onFrame(ProtocolFrame(FrameType.COMMAND_ERROR, 1, byteArrayOf(0x04)))
+        val failed = events.filterIsInstance<ScenarioEvent.Failed>().single()
+        assertTrue(failed.reason.contains("0x04"))
+        assertEquals(ScpDownloadOrchestrator.Phase.FAILED, orch.phase)
+    }
+
+    private fun outbound(events: List<ScenarioEvent>): List<ProtocolFrame> =
+        events.mapNotNull { (it as? ScenarioEvent.Outbound)?.frame }
+}

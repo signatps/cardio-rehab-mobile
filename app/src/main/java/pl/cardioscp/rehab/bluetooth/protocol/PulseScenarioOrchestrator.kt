@@ -66,8 +66,11 @@ class PulseScenarioOrchestrator(
                 fail("command error 0x${err.code.toString(16)}", out)
             }
             FrameType.DEVICE_ERROR -> {
-                // Electrode disconnect etc. — do not abort pulse scenario.
-                out += ScenarioEvent.Info("device async error (ignored during pulse)")
+                // Electrode disconnect etc. — do not abort; UI reads DeviceError separately.
+                val code = frame.payload.firstOrNull()?.toInt()?.and(0xFF)
+                if (code == 0x01) {
+                    out += ScenarioEvent.Info("Uwaga: elektrody odpięte (DevError 0x01)")
+                }
             }
             else -> Unit
         }
