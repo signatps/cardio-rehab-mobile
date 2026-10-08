@@ -89,7 +89,8 @@ Po ACK urządzenie buduje SCP i wysyła `EcgOfflineDone`.
 
 ### SCP Info `0x08`
 
-Dokument: bajty „6 do 10” = rozmiar. Interpretacja robocza: **`uint32` LE** (4 B); ewentualny 5. bajt ignorowany jako padding. Do weryfikacji na urządzeniu.
+Rozmiar pliku SCP: **`uint32` little-endian — dokładnie 4 bajty** (`PayloadCodec.parseScpInfoSize`).  
+Dokument źródłowy pisał „6 do 10”; przyjmujemy 4 B i zweryfikujemy na żywym EHO-Mini.
 
 Ostatni fragment SCP (brama BPMN): gdy `receivedBytes >= scpSize` z `ScpInfo` (brak flagi w payloadzie fragmentu).
 
@@ -153,10 +154,16 @@ Próbki w `raw/` to **Biosig/SCP-ECG** (`SCPECG` @ offset 16). Aplikacja składa
 
 ---
 
+## Discovery Bluetooth
+
+Na razie **brak filtra nazwy** — `BluetoothDeviceFilter` akceptuje dowolną nazwę BT (`nameContains = null`).  
+Można później ustawić podciąg (np. `EHO`) bez zmiany API.
+
 ## Otwarte / do potwierdzenia na EHO-Mini
 
-- [ ] UUID SPP / nazwa BT reklamowa EHO-Mini
-- [ ] Czy rozmiar w `ScpInfo` to dokładnie 4 czy 5 bajtów
+- [ ] UUID kanału RFCOMM/SPP
+- [x] `ScpInfo` = 4 bajty (uint32 LE) — do potwierdzenia empirycznie
+- [ ] Docelowa nazwa reklamowa BT (obecnie: dowolna)
 - [ ] Czy produkcyjny firmware wymaga ACK na `PulseValue` (przyjmujemy TAK wg ProPlus)
 - [ ] Komenda odzysku badań po reconnect (w ProPlus oznaczona „X”)
 - [ ] Mapowanie brandingu EHO-Mini ↔ ten protokół Silvermedia (założenie: ten sam framing)

@@ -1,15 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Cardio Rehab</string>
+    <string name="brand_name">Pro-PLUS SA</string>
+    <string name="brand_tagline">Solutions for Telemedicine</string>
     <string name="home_title">Cardio Rehab</string>
     <string name="home_subtitle">Domowa rehabilitacja kardiologiczna z EHO-Mini</string>
-    <string name="connect_device">Połącz z EHO-Mini</string>
+    <string name="connect_device">Połącz z urządzeniem EKG</string>
     <string name="device_status_idle">Urządzenie niepołączone</string>
-    <string name="device_status_scanning">Szukam EHO-Mini…</string>
-    <string name="device_status_connected">Połączono z EHO-Mini</string>
+    <string name="device_status_scanning">Szukam urządzeń Bluetooth…</string>
+    <string name="device_status_connected">Połączono z urządzeniem EKG</string>
     <string name="permissions_needed">Wymagane uprawnienia Bluetooth</string>
-    <string name="permissions_rationale">Aplikacja potrzebuje Bluetooth, aby sterować rejestratorem EKG EHO-Mini.</string>
+    <string name="permissions_rationale">Aplikacja potrzebuje Bluetooth, aby sterować rejestratorem EKG.</string>
     <string name="grant_permissions">Udziel uprawnień</string>
-    <string name="session_placeholder">Sesja treningowa pojawi się po podłączeniu protokołu urządzenia.</string>
-    <string name="awaiting_firmware_docs">Oczekiwanie na wsad / dokumentację protokołu EHO-Mini (Plus).</string>
+    <string name="session_placeholder">Sesja treningowa — warstwa protokołu gotowa; transport BT w toku.</string>
+    <string name="protocol_ready_hint">Skan akceptuje dowolną nazwę BT. ScpInfo: uint32 LE (4 bajty).</string>
 </resources>

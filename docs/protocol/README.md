@@ -18,4 +18,4 @@ Warstwa techniczna komunikacji Bluetooth z rejestratorem EKG (Plus / Pro-Plus / 
 - typy / payloady komend
 - `OfflineSessionOrchestrator` — flow BPMN (Init, parallel ECG+Pulse, fragmenty SCP, End)
 
-Transport BT (socket) podłączymy osobno po potwierdzeniu SPP/nazwy urządzenia.
+Transport BT (socket): skan na razie bez filtra nazwy; SPP UUID do ustalenia. `ScpInfo` = 4 B.

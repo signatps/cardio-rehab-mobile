@@ -16,8 +16,13 @@ class PayloadCodecTest {
     }
 
     @Test
-    fun scpInfo_sizeLittleEndian() {
+    fun scpInfo_sizeLittleEndian_exactlyFourBytes() {
         assertEquals(90324L, PayloadCodec.parseScpInfoSize(byteArrayOf(0xD4.toByte(), 0x60, 0x01, 0x00)))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun scpInfo_rejectsWrongLength() {
+        PayloadCodec.parseScpInfoSize(byteArrayOf(1, 2, 3, 4, 5))
     }
 
     @Test

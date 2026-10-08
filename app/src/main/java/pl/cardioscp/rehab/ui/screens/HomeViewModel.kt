@@ -47,11 +47,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(connection = EhoMiniConnectionState.PermissionsRequired) }
             return
         }
-        // Real scan/connect lands with the EHO-Mini protocol dump.
+        // Scan accepts any BT name until EHO-Mini advertising string is locked.
         _uiState.update {
             it.copy(
                 connection = EhoMiniConnectionState.Error(
-                    "Protokół EHO-Mini jeszcze niezaimplementowany — czekamy na wsad.",
+                    "Transport SPP jeszcze niepodłączony — skan przyjmie dowolną nazwę BT.",
                 ),
             )
         }

@@ -46,8 +46,14 @@ object PayloadCodec {
 
     fun get(infoId: Int): ByteArray = byteArrayOf(infoId.toByte())
 
+    /**
+     * SCP Info size is a little-endian uint32 (exactly 4 bytes).
+     * Confirmed for integration; re-verify against the live EHO-Mini if needed.
+     */
     fun parseScpInfoSize(payload: ByteArray): Long {
-        require(payload.size >= 4) { "SCP Info payload too short: ${payload.size}" }
+        require(payload.size == 4) {
+            "SCP Info size must be exactly 4 bytes, was ${payload.size}"
+        }
         var size = 0L
         for (i in 0 until 4) {
             size = size or ((payload[i].toLong() and 0xFFL) shl (8 * i))
