@@ -5,20 +5,20 @@ package pl.cardioscp.rehab.session
  * EKG spoczynkowe na start → ×N (ćwiczenie + puls → EKG szczyt → odpoczynek).
  */
 data class TrainingPlan(
-    val cycles: Int = 3,
+    val cycles: Int = 2,
     /** Czas wysiłku [s]. */
-    val exerciseSec: Int = 60,
+    val exerciseSec: Int = 15,
     /** Czas odpoczynku [s] — startuje po zakończeniu EKG szczytowego. */
-    val restSec: Int = 60,
+    val restSec: Int = 15,
     /** Czas akwizycji EKG Offline [s]. */
-    val acquireSec: Int = 10,
+    val acquireSec: Int = 5,
     /** Automatyczne dopuszczenie po ankiecie [s]. */
     val admissionWaitSec: Int = 10,
 ) {
     init {
         require(cycles >= 1)
-        require(exerciseSec >= 10)
-        require(restSec >= 10)
+        require(exerciseSec >= 5)
+        require(restSec >= 5)
         require(acquireSec >= 2)
         require(admissionWaitSec >= 0)
     }

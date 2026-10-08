@@ -3,6 +3,9 @@ package pl.cardioscp.rehab.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -13,14 +16,21 @@ import pl.cardioscp.rehab.ui.screens.EcgViewerScreen
 import pl.cardioscp.rehab.ui.screens.HomeScreen
 import pl.cardioscp.rehab.ui.screens.HomeViewModel
 import pl.cardioscp.rehab.ui.screens.RecordingsScreen
+import pl.cardioscp.rehab.ui.screens.clinic.DashboardScreen
+import pl.cardioscp.rehab.ui.screens.clinic.DayPlanScreen
+import pl.cardioscp.rehab.ui.screens.clinic.DiseasesScreen
+import pl.cardioscp.rehab.ui.screens.clinic.MeasurementsScreen
+import pl.cardioscp.rehab.ui.screens.clinic.MedsScreen
+import pl.cardioscp.rehab.ui.screens.clinic.SessionsCalendarScreen
 import pl.cardioscp.rehab.ui.screens.session.RehabSessionScreen
+import pl.cardioscp.rehab.ui.shell.AppDestination
+import pl.cardioscp.rehab.ui.shell.AppShell
 
 object Routes {
     const val SPLASH = "splash"
-    const val HOME = "home"
+    const val MAIN = "main"
     const val RECORDINGS = "recordings"
     const val ECG_VIEWER = "ecg_viewer"
-    const val REHAB_SESSION = "rehab_session"
 }
 
 @Composable
@@ -29,6 +39,7 @@ fun CardioRehabNavHost(
 ) {
     val navController = rememberNavController()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val clinic by viewModel.clinic.collectAsStateWithLifecycle()
     val viewerRecording by viewModel.viewerRecording.collectAsStateWithLifecycle()
     val viewerError by viewModel.viewerError.collectAsStateWithLifecycle()
     val viewerTitle by viewModel.viewerTitle.collectAsStateWithLifecycle()
@@ -46,34 +57,70 @@ fun CardioRehabNavHost(
         composable(Routes.SPLASH) {
             BrandSplashScreen(
                 onFinished = {
-                    navController.navigate(Routes.HOME) {
+                    navController.navigate(Routes.MAIN) {
                         popUpTo(Routes.SPLASH) { inclusive = true }
                     }
                 },
             )
         }
-        composable(Routes.HOME) {
-            HomeScreen(
-                viewModel = viewModel,
-                onOpenRecordings = {
-                    viewModel.refreshRecordings()
-                    navController.navigate(Routes.RECORDINGS)
-                },
-                onOpenRehabSession = {
-                    navController.navigate(Routes.REHAB_SESSION)
-                },
-            )
-        }
-        composable(Routes.REHAB_SESSION) {
-            RehabSessionScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                onOpenEcg = {
-                    navController.navigate(Routes.ECG_VIEWER) {
-                        launchSingleTop = true
+        composable(Routes.MAIN) {
+            var destination by rememberSaveable { mutableStateOf(AppDestination.DASHBOARD.name) }
+            val current = runCatching { AppDestination.valueOf(destination) }
+                .getOrDefault(AppDestination.DASHBOARD)
+
+            AppShell(
+                destination = current,
+                onDestination = { dest ->
+                    when (dest) {
+                        AppDestination.ECG -> {
+                            viewModel.refreshRecordings()
+                            navController.navigate(Routes.RECORDINGS)
+                        }
+                        else -> destination = dest.name
                     }
                 },
-            )
+                patientName = clinic.patientName,
+            ) {
+                when (current) {
+                    AppDestination.DASHBOARD -> DashboardScreen(
+                        clinic = clinic,
+                        livePulseBpm = state.lastPulseBpm,
+                        onOpenRehab = { destination = AppDestination.REHAB.name },
+                        onOpenDayPlan = { destination = AppDestination.DAY_PLAN.name },
+                        onOpenMeds = { destination = AppDestination.MEDS.name },
+                        onOpenMeasurements = { destination = AppDestination.MEASUREMENTS.name },
+                    )
+                    AppDestination.SESSIONS -> SessionsCalendarScreen(
+                        clinic = clinic,
+                        onStartRehab = { destination = AppDestination.REHAB.name },
+                    )
+                    AppDestination.DAY_PLAN -> DayPlanScreen(clinic = clinic)
+                    AppDestination.MEASUREMENTS -> MeasurementsScreen(clinic = clinic)
+                    AppDestination.MEDS -> MedsScreen(
+                        clinic = clinic,
+                        onMarkTaken = viewModel::markDoseTaken,
+                    )
+                    AppDestination.DISEASES -> DiseasesScreen(clinic = clinic)
+                    AppDestination.REHAB -> RehabSessionScreen(
+                        viewModel = viewModel,
+                        onBack = { destination = AppDestination.DASHBOARD.name },
+                        onOpenEcg = {
+                            navController.navigate(Routes.ECG_VIEWER) {
+                                launchSingleTop = true
+                            }
+                        },
+                    )
+                    AppDestination.DEVICE -> HomeScreen(
+                        viewModel = viewModel,
+                        onOpenRecordings = {
+                            viewModel.refreshRecordings()
+                            navController.navigate(Routes.RECORDINGS)
+                        },
+                        onOpenRehabSession = { destination = AppDestination.REHAB.name },
+                    )
+                    AppDestination.ECG -> Unit
+                }
+            }
         }
         composable(Routes.RECORDINGS) {
             RecordingsScreen(

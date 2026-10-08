@@ -1,6 +1,5 @@
 package pl.cardioscp.rehab.ui.screens.session
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,9 +39,9 @@ import pl.cardioscp.rehab.session.DefaultRehabSurvey
 import pl.cardioscp.rehab.session.RehabStep
 import pl.cardioscp.rehab.session.TrainingPhaseKind
 import pl.cardioscp.rehab.ui.ble.MeasurePopup
+import pl.cardioscp.rehab.ui.components.AnalogGauge
 import pl.cardioscp.rehab.ui.screens.HomeViewModel
-import pl.cardioscp.rehab.ui.theme.DeepTeal
-import pl.cardioscp.rehab.ui.theme.Sand
+import pl.cardioscp.rehab.ui.theme.ProPlusColors
 
 @Composable
 fun RehabSessionScreen(
@@ -56,8 +55,7 @@ fun RehabSessionScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(Sand)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = {
@@ -69,7 +67,7 @@ fun RehabSessionScreen(
             Text(
                 "Sesja rehabilitacji",
                 style = MaterialTheme.typography.titleLarge,
-                color = DeepTeal,
+                color = ProPlusColors.Navy,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -83,7 +81,7 @@ fun RehabSessionScreen(
 
         StepHeader(state.step)
         state.statusMessage?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = DeepTeal)
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = ProPlusColors.Navy)
             Spacer(Modifier.height(8.dp))
         }
         state.error?.let {
@@ -177,7 +175,7 @@ fun RehabSessionScreen(
                 Text(
                     "%d s".format(left),
                     style = MaterialTheme.typography.displaySmall,
-                    color = DeepTeal,
+                    color = ProPlusColors.Navy,
                     fontWeight = FontWeight.Bold,
                 )
                 LinearProgressIndicator(
@@ -193,7 +191,7 @@ fun RehabSessionScreen(
                 if (t == null) {
                     Text("Przygotowanie treningu…")
                 } else {
-                    Text(t.phase.label, style = MaterialTheme.typography.headlineSmall, color = DeepTeal)
+                    Text(t.phase.label, style = MaterialTheme.typography.headlineSmall, color = ProPlusColors.Navy)
                     Text(
                         when (t.phase.kind) {
                             TrainingPhaseKind.ECG_REST_START -> "Akwizycja EKG spoczynkowego"
@@ -205,11 +203,14 @@ fun RehabSessionScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     if (t.measuringPulse) {
-                        Text(
-                            t.pulseBpm?.let { "Tętno: $it bpm" } ?: "Tętno: oczekiwanie…",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = DeepTeal,
+                        AnalogGauge(
+                            value = t.pulseBpm?.toFloat(),
+                            minValue = 40f,
+                            maxValue = 180f,
+                            label = t.pulseBpm?.let { "Tętno $it bpm" } ?: "Tętno: oczekiwanie…",
+                            unit = "bpm",
+                            accent = ProPlusColors.Accent,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                         Spacer(Modifier.height(8.dp))
                     }
@@ -232,7 +233,7 @@ fun RehabSessionScreen(
                     }
                     if (t.acquiringEcg) {
                         Spacer(Modifier.height(8.dp))
-                        Text("Init → Offline → pobieranie SCP…", color = DeepTeal)
+                        Text("Init → Offline → pobieranie SCP…", color = ProPlusColors.Navy)
                         LinearProgressIndicator(
                             progress = { 0f },
                             modifier = Modifier.fillMaxWidth(),
@@ -310,14 +311,14 @@ private fun IntroContent(onStart: (includeWeight: Boolean) -> Unit) {
         Text(
             "Przebieg sesji",
             style = MaterialTheme.typography.titleMedium,
-            color = DeepTeal,
+            color = ProPlusColors.Navy,
         )
         Text("1. EKG spoczynkowe: Init → Offline → pobranie SCP")
         Text("2. Ciśnienie tętnicze (BLE)")
         Text("3. Waga — gdy niewydolność serca (BLE)")
         Text("4. Ankieta kwalifikacyjna")
         Text("5. Oczekiwanie na dopuszczenie (10 s)")
-        Text("6. Trening: EKG spoczynkowe → 3× (1 min ćwiczenie + puls → EKG szczyt → 1 min odpoczynek)")
+        Text("6. Trening: EKG spoczynkowe → 2× (15 s ćwiczenie + puls → EKG szczyt 5 s → 15 s odpoczynek)")
         Text("7. Podsumowanie i przegląd EKG z sesji")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = includeWeight, onCheckedChange = { includeWeight = it })
@@ -344,7 +345,7 @@ private fun SurveyContent(
         Text(
             "Ankieta przed treningiem",
             style = MaterialTheme.typography.titleMedium,
-            color = DeepTeal,
+            color = ProPlusColors.Navy,
         )
         Text(
             "Pogrubiona odpowiedź to ścieżka kwalifikująca; inna dyskwalifikuje.",
@@ -409,7 +410,7 @@ private fun SummaryContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Podsumowanie sesji", style = MaterialTheme.typography.titleMedium, color = DeepTeal)
+        Text("Podsumowanie sesji", style = MaterialTheme.typography.titleMedium, color = ProPlusColors.Navy)
         state.vitals.bloodPressure?.let {
             Text("Ciśnienie: ${it.summary}")
             if (state.vitals.bloodPressureNote.isNotBlank()) {

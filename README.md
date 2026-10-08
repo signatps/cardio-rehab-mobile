@@ -10,7 +10,9 @@ Repozytorium: [signatps/cardio-rehab-mobile](https://github.com/signatps/cardio-
 
 Działa połączenie **Bluetooth Classic SPP** z `PRO_PLUS_ECG_******` oraz **BLE** do ciśnienia/wagi (port z mobile-DSD).
 
-**Sesja rehabilitacji** (po SPP): EKG spoczynkowe → ciśnienie BLE → waga BLE (gdy HF) → ankieta kwalifikacyjna → trening sekwencyjny interwałowy (domyślnie 3×1 min wysiłek / 1 min odpoczynek, akwizycje EKG wg schematu + 2 min po) → podsumowanie z przeglądem EKG z sesji.
+UI w stylu **CardioSCP / mobile-DSD**: lewe menu + prawa ramka treści, kalendarz sesji, plan dnia, leki, choroby, pomiary (demo lokalne) oraz wskaźnik analogowy tętna/ciśnienia.
+
+**Sesja rehabilitacji** (po SPP): EKG spoczynkowe → ciśnienie BLE → waga BLE (gdy HF) → ankieta kwalifikacyjna → trening sekwencyjny interwałowy (domyślnie 2×15 s wysiłek / 15 s odpoczynek, akwizycja EKG 5 s) → podsumowanie z przeglądem EKG z sesji.
 
 Scenariusze ręczne:
 

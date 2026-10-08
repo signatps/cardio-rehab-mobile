@@ -15,6 +15,9 @@ import pl.cardioscp.rehab.bluetooth.BondedEcgDevice
 import pl.cardioscp.rehab.bluetooth.EhoMiniConnectionState
 import pl.cardioscp.rehab.bluetooth.ProtocolSessionController
 import pl.cardioscp.rehab.bluetooth.SppEhoMiniDeviceClient
+import pl.cardioscp.rehab.clinic.ClinicDemoStore
+import pl.cardioscp.rehab.clinic.ClinicSnapshot
+import pl.cardioscp.rehab.clinic.VitalKind
 import pl.cardioscp.rehab.scp.ScpEcgParser
 import pl.cardioscp.rehab.scp.ScpEcgRecording
 import pl.cardioscp.rehab.scp.ScpRecording
@@ -40,6 +43,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val sessionController = ProtocolSessionController(deviceClient, viewModelScope)
     private val recordingStore = ScpRecordingStore(application)
     val bleMeasure = BleMeasureController(application)
+
+    private val clinicStore = ClinicDemoStore()
+    private val _clinic = MutableStateFlow(clinicStore.snapshot())
+    val clinic: StateFlow<ClinicSnapshot> = _clinic
 
     private val rehabEngine = RehabSessionEngine(
         scope = viewModelScope,
@@ -199,10 +206,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         rehabEngine.start(
             includeWeight = includeWeight,
             plan = TrainingPlan(
-                cycles = 3,
-                exerciseSec = 60,
-                restSec = 60,
-                acquireSec = 10,
+                cycles = 2,
+                exerciseSec = 15,
+                restSec = 15,
+                acquireSec = 5,
                 admissionWaitSec = 10,
             ),
         )
@@ -216,10 +223,41 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun simulateBpMeasure() {
         if (!bleMeasure.measurePopupOpen) rehabEngine.startBpMeasure()
         bleMeasure.simulateMeasure()
+        recordClinicMeasurement(
+            VitalKind.BLOOD_PRESSURE,
+            "Ciśnienie",
+            "128/82 · 72/min",
+            note = "symulacja",
+        )
     }
     fun simulateWeightMeasure() {
         if (!bleMeasure.measurePopupOpen) rehabEngine.startWeightMeasure()
         bleMeasure.simulateMeasure()
+        recordClinicMeasurement(
+            VitalKind.WEIGHT,
+            "Masa",
+            "78.2 kg",
+            note = "symulacja",
+        )
+    }
+
+    fun markDoseTaken(id: String) {
+        clinicStore.markDoseTaken(id)
+        _clinic.value = clinicStore.snapshot()
+    }
+
+    fun recordClinicMeasurement(
+        kind: VitalKind,
+        label: String,
+        valueText: String,
+        note: String = "",
+    ) {
+        clinicStore.addMeasurement(kind, label, valueText, note)
+        _clinic.value = clinicStore.snapshot()
+    }
+
+    fun refreshClinic() {
+        _clinic.value = clinicStore.snapshot()
     }
     fun skipWeight() = rehabEngine.skipWeight()
     fun answerSurvey(questionId: String, yes: Boolean) = rehabEngine.answerSurvey(questionId, yes)
