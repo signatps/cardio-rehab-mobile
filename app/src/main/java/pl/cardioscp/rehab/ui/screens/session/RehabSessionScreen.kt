@@ -1,5 +1,8 @@
 package pl.cardioscp.rehab.ui.screens.session
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,15 +12,26 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Favorite
+import androidx.compose.material.icons.outlined.Hotel
+import androidx.compose.material.icons.outlined.HourglassBottom
+import androidx.compose.material.icons.outlined.MonitorHeart
+import androidx.compose.material.icons.outlined.MonitorWeight
+import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
@@ -26,8 +40,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,10 +52,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import pl.cardioscp.rehab.session.CycleHeartRateLimit
@@ -384,82 +400,58 @@ private fun IntroContent(
 ) {
     var includeWeight by remember { mutableStateOf(true) }
     val defaults = remember { HeartRateCoach.defaultLimits(2) }
-    var cycleMins by remember {
-        mutableStateOf(defaults.map { it.minBpm.toString() })
-    }
-    var cycleMaxs by remember {
-        mutableStateOf(defaults.map { it.maxBpm.toString() })
-    }
+    var cycleMins by remember { mutableStateOf(defaults.map { it.minBpm }) }
+    var cycleMaxs by remember { mutableStateOf(defaults.map { it.maxBpm }) }
     Column(
         Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(
             "Przebieg sesji",
             style = MaterialTheme.typography.titleMedium,
             color = ProPlusColors.Navy,
         )
-        Text("1. EKG spoczynkowe: Init → Offline → pobranie SCP")
-        Text("2. Ciśnienie tętnicze (BLE)")
-        Text("3. Waga — gdy niewydolność serca (BLE)")
-        Text("4. Ankieta kwalifikacyjna")
-        Text("5. Oczekiwanie na dopuszczenie (10 s)")
-        Text("6. Trening: EKG spoczynkowe → 2× (15 s ćwiczenie + puls → EKG szczyt 5 s → 15 s odpoczynek)")
-        Text("7. Podsumowanie i przegląd EKG z sesji")
+        SessionTimelineStrip(includeWeight = includeWeight)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = includeWeight, onCheckedChange = { includeWeight = it })
             Text("Niewydolność serca — mierz także wagę")
         }
         Text(
-            "Limity tętna na cykl (min–max)",
+            "Limity tętna",
             style = MaterialTheme.typography.titleMedium,
             color = ProPlusColors.Navy,
         )
         Text(
-            "Pacjent utrzymuje tętno w zakresie. Poniżej → PRZYSPIESZ, powyżej → ZWOLNIJ (ekran + głos).",
-            style = MaterialTheme.typography.bodyMedium,
+            "Poniżej → PRZYSPIESZ, powyżej → ZWOLNIJ",
+            style = MaterialTheme.typography.bodySmall,
             color = ProPlusColors.Muted,
         )
         defaults.indices.forEach { idx ->
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Cykl ${idx + 1}", Modifier.width(64.dp), fontWeight = FontWeight.SemiBold)
-                OutlinedTextField(
-                    value = cycleMins[idx],
-                    onValueChange = { v ->
-                        cycleMins = cycleMins.toMutableList().also { it[idx] = v.filter(Char::isDigit).take(3) }
-                    },
-                    label = { Text("Min") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-                OutlinedTextField(
-                    value = cycleMaxs[idx],
-                    onValueChange = { v ->
-                        cycleMaxs = cycleMaxs.toMutableList().also { it[idx] = v.filter(Char::isDigit).take(3) }
-                    },
-                    label = { Text("Max") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                )
-            }
+            HeartRateLimitStepper(
+                cycle = idx + 1,
+                minBpm = cycleMins[idx],
+                maxBpm = cycleMaxs[idx],
+                onMinChange = { v ->
+                    cycleMins = cycleMins.toMutableList().also { list ->
+                        list[idx] = v.coerceIn(40, (cycleMaxs[idx] - 1).coerceAtLeast(41))
+                    }
+                },
+                onMaxChange = { v ->
+                    cycleMaxs = cycleMaxs.toMutableList().also { list ->
+                        list[idx] = v.coerceIn((cycleMins[idx] + 1).coerceAtMost(219), 220)
+                    }
+                },
+            )
         }
         Button(
             onClick = {
                 val limits = defaults.indices.map { idx ->
-                    val min = cycleMins[idx].toIntOrNull() ?: defaults[idx].minBpm
-                    val max = cycleMaxs[idx].toIntOrNull() ?: defaults[idx].maxBpm
                     CycleHeartRateLimit(
                         cycle = idx + 1,
-                        minBpm = min.coerceIn(40, 199),
-                        maxBpm = max.coerceIn(min + 1, 220),
+                        minBpm = cycleMins[idx],
+                        maxBpm = cycleMaxs[idx],
                     )
                 }
                 onStart(includeWeight, limits)
@@ -467,6 +459,177 @@ private fun IntroContent(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Rozpocznij sesję")
+        }
+    }
+}
+
+private data class TimelineStep(
+    val icon: ImageVector,
+    val badge: String,
+    val label: String,
+    val enabled: Boolean = true,
+)
+
+@Composable
+private fun SessionTimelineStrip(includeWeight: Boolean) {
+    val steps = listOf(
+        TimelineStep(Icons.Outlined.Hotel, "K", "Kwalifikacja EKG"),
+        TimelineStep(Icons.Outlined.MonitorHeart, "BP", "Ciśnienie"),
+        TimelineStep(Icons.Outlined.MonitorWeight, "kg", "Waga", enabled = includeWeight),
+        TimelineStep(Icons.Outlined.Assignment, "A", "Ankieta"),
+        TimelineStep(Icons.Outlined.HourglassBottom, "10s", "Dopuszczenie"),
+        TimelineStep(Icons.AutoMirrored.Outlined.DirectionsRun, "T", "Trening"),
+        TimelineStep(Icons.Outlined.Summarize, "Σ", "Podsumowanie"),
+    )
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            steps.forEachIndexed { index, step ->
+                if (index > 0) {
+                    Box(
+                        Modifier
+                            .width(18.dp)
+                            .height(2.dp)
+                            .background(
+                                if (step.enabled) ProPlusColors.Accent.copy(alpha = 0.45f)
+                                else ProPlusColors.Line,
+                            ),
+                    )
+                }
+                TimelinePictogram(step)
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimelinePictogram(step: TimelineStep) {
+    val tint = if (step.enabled) ProPlusColors.Navy else ProPlusColors.Muted.copy(alpha = 0.45f)
+    val border = if (step.enabled) ProPlusColors.Line else ProPlusColors.Line.copy(alpha = 0.5f)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.width(64.dp),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (step.enabled) ProPlusColors.Surface else ProPlusColors.Bg,
+            border = BorderStroke(1.dp, border),
+            modifier = Modifier.size(52.dp),
+        ) {
+            Column(
+                Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(step.icon, contentDescription = step.label, tint = tint, modifier = Modifier.size(22.dp))
+                Text(
+                    step.badge,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (step.enabled) ProPlusColors.Accent else ProPlusColors.Muted,
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            step.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (step.enabled) ProPlusColors.Muted else ProPlusColors.Muted.copy(alpha = 0.45f),
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            fontSize = 10.sp,
+            lineHeight = 11.sp,
+        )
+    }
+}
+
+@Composable
+private fun HeartRateLimitStepper(
+    cycle: Int,
+    minBpm: Int,
+    maxBpm: Int,
+    onMinChange: (Int) -> Unit,
+    onMaxChange: (Int) -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, ProPlusColors.Line),
+        color = ProPlusColors.Surface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                Icons.Outlined.Favorite,
+                contentDescription = null,
+                tint = ProPlusColors.Accent,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                "C$cycle",
+                fontWeight = FontWeight.Bold,
+                color = ProPlusColors.Navy,
+                modifier = Modifier.width(28.dp),
+            )
+            CompactBpmStepper(
+                value = minBpm,
+                onChange = onMinChange,
+                contentDescription = "Min cykl $cycle",
+            )
+            Text("–", color = ProPlusColors.Muted, fontWeight = FontWeight.Bold)
+            CompactBpmStepper(
+                value = maxBpm,
+                onChange = onMaxChange,
+                contentDescription = "Max cykl $cycle",
+            )
+            Text("bpm", style = MaterialTheme.typography.labelSmall, color = ProPlusColors.Muted)
+        }
+    }
+}
+
+@Composable
+private fun CompactBpmStepper(
+    value: Int,
+    onChange: (Int) -> Unit,
+    contentDescription: String,
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, ProPlusColors.Line),
+        color = ProPlusColors.Bg,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 2.dp),
+        ) {
+            IconButton(
+                onClick = { onChange(value - 1) },
+                modifier = Modifier.size(32.dp),
+            ) {
+                Icon(Icons.Outlined.Remove, contentDescription = "Zmniejsz $contentDescription")
+            }
+            Text(
+                "$value",
+                fontWeight = FontWeight.Bold,
+                color = ProPlusColors.Navy,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.width(32.dp),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            IconButton(
+                onClick = { onChange(value + 1) },
+                modifier = Modifier.size(32.dp),
+            ) {
+                Icon(Icons.Outlined.Add, contentDescription = "Zwiększ $contentDescription")
+            }
         }
     }
 }

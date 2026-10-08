@@ -84,8 +84,8 @@ object HeartRateCoach {
         (1..cycles).map { c ->
             CycleHeartRateLimit(
                 cycle = c,
-                minBpm = 90 + (c - 1) * 5,
-                maxBpm = 120 + (c - 1) * 5,
+                minBpm = 80 + (c - 1) * 5,
+                maxBpm = 90 + (c - 1) * 5,
             )
         }
 }
