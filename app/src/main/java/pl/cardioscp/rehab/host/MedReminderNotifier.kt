@@ -30,7 +30,15 @@ object MedReminderNotifier {
     fun notifyMedicationReminder(context: Context, title: String, body: String): Boolean {
         val app = context.applicationContext
         ensureChannel(app)
-        if (!canPost(app)) return false
+        // Jawne sprawdzenie tuż przed notify — lint MissingPermission (API 33+).
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(app, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        val nm = NotificationManagerCompat.from(app)
+        if (!nm.areNotificationsEnabled()) return false
         val open = PendingIntent.getActivity(
             app,
             0,
@@ -50,7 +58,7 @@ object MedReminderNotifier {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
         return runCatching {
-            NotificationManagerCompat.from(app).notify(NOTIFICATION_ID, notification)
+            nm.notify(NOTIFICATION_ID, notification)
             true
         }.getOrDefault(false)
     }
