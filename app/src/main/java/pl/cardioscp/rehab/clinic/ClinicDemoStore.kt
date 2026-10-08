@@ -27,7 +27,14 @@ class ClinicDemoStore {
         dayPlan = dayPlan.sortedBy { it.time },
     )
 
-    fun addMeasurement(kind: VitalKind, label: String, valueText: String, note: String = "") {
+    fun addMeasurement(
+        kind: VitalKind,
+        label: String,
+        valueText: String,
+        note: String = "",
+        sessionGroupId: String? = null,
+        sessionGroupTitle: String? = null,
+    ) {
         measurements = listOf(
             ClinicMeasurement(
                 id = UUID.randomUUID().toString(),
@@ -36,6 +43,8 @@ class ClinicDemoStore {
                 valueText = valueText,
                 measuredAtMs = System.currentTimeMillis(),
                 note = note,
+                sessionGroupId = sessionGroupId,
+                sessionGroupTitle = sessionGroupTitle,
             ),
         ) + measurements
     }
@@ -58,15 +67,66 @@ class ClinicDemoStore {
     private fun at(daysAgo: Long, hour: Int, minute: Int = 0): Long =
         today.minusDays(daysAgo).atTime(hour, minute).atZone(zone).toInstant().toEpochMilli()
 
-    private fun defaultMeasurements() = listOf(
-        ClinicMeasurement("m1", VitalKind.BLOOD_PRESSURE, "Ciśnienie", "128/82 · 72/min", at(0, 8, 10)),
-        ClinicMeasurement("m2", VitalKind.WEIGHT, "Masa", "78.2 kg", at(0, 8, 5)),
-        ClinicMeasurement("m3", VitalKind.PULSE, "Tętno", "68 bpm", at(1, 9, 0)),
-        ClinicMeasurement("m4", VitalKind.BLOOD_PRESSURE, "Ciśnienie", "132/84 · 74/min", at(1, 8, 15)),
-        ClinicMeasurement("m5", VitalKind.WEIGHT, "Masa", "78.5 kg", at(2, 8, 0)),
-        ClinicMeasurement("m6", VitalKind.SPO2, "SpO₂", "97%", at(3, 10, 0)),
-        ClinicMeasurement("m7", VitalKind.BLOOD_PRESSURE, "Ciśnienie", "126/80 · 70/min", at(4, 8, 20)),
-    )
+    private fun defaultMeasurements(): List<ClinicMeasurement> {
+        val sessionDone = "sess-done"
+        val sessionTitle = "Sesja rehab · trening sekwencyjny"
+        val sessionOlder = "sess-older"
+        val sessionOlderTitle = "Sesja rehab · trening sekwencyjny"
+        return listOf(
+            // Samodzielne pomiary (poza sesją)
+            ClinicMeasurement("m1", VitalKind.BLOOD_PRESSURE, "Ciśnienie", "128/82 · 72/min", at(0, 8, 10)),
+            ClinicMeasurement("m2", VitalKind.WEIGHT, "Masa", "78.2 kg", at(0, 8, 5)),
+            ClinicMeasurement("m6", VitalKind.SPO2, "SpO₂", "97%", at(3, 10, 0)),
+            // Sesja sprzed 2 dni — grupa badań
+            ClinicMeasurement(
+                "s3-bp", VitalKind.BLOOD_PRESSURE, "Ciśnienie przed", "126/80 · 70/min",
+                at(2, 10, 5), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
+            ),
+            ClinicMeasurement(
+                "s3-w", VitalKind.WEIGHT, "Masa", "78.4 kg",
+                at(2, 10, 8), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
+            ),
+            ClinicMeasurement(
+                "s3-ecg0", VitalKind.ECG, "EKG spoczynkowe", "SCP · 5 s",
+                at(2, 10, 12), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
+            ),
+            ClinicMeasurement(
+                "s3-p1", VitalKind.PULSE, "Tętno wysiłek 1", "98 bpm",
+                at(2, 10, 14), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
+            ),
+            ClinicMeasurement(
+                "s3-ecg1", VitalKind.ECG, "EKG szczyt 1", "SCP · 5 s",
+                at(2, 10, 16), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
+            ),
+            ClinicMeasurement(
+                "s3-p2", VitalKind.PULSE, "Tętno wysiłek 2", "104 bpm",
+                at(2, 10, 18), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
+            ),
+            ClinicMeasurement(
+                "s3-ecg2", VitalKind.ECG, "EKG szczyt 2", "SCP · 5 s",
+                at(2, 10, 20), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
+            ),
+            // Starsza sesja
+            ClinicMeasurement(
+                "s4-bp", VitalKind.BLOOD_PRESSURE, "Ciśnienie przed", "132/84 · 74/min",
+                at(5, 10, 5), sessionGroupId = sessionOlder, sessionGroupTitle = sessionOlderTitle,
+            ),
+            ClinicMeasurement(
+                "s4-ecg0", VitalKind.ECG, "EKG spoczynkowe", "SCP · 5 s",
+                at(5, 10, 10), sessionGroupId = sessionOlder, sessionGroupTitle = sessionOlderTitle,
+            ),
+            ClinicMeasurement(
+                "s4-p1", VitalKind.PULSE, "Tętno wysiłek", "92 bpm",
+                at(5, 10, 12), sessionGroupId = sessionOlder, sessionGroupTitle = sessionOlderTitle,
+            ),
+            ClinicMeasurement(
+                "s4-ecg1", VitalKind.ECG, "EKG szczyt", "SCP · 5 s",
+                at(5, 10, 14), sessionGroupId = sessionOlder, sessionGroupTitle = sessionOlderTitle,
+            ),
+            ClinicMeasurement("m7", VitalKind.BLOOD_PRESSURE, "Ciśnienie", "126/80 · 70/min", at(4, 8, 20)),
+            ClinicMeasurement("m3", VitalKind.PULSE, "Tętno", "68 bpm", at(1, 9, 0)),
+        )
+    }
 
     private fun defaultMedications() = listOf(
         Medication("med1", "Bisoprolol", "5 mg", "rano"),

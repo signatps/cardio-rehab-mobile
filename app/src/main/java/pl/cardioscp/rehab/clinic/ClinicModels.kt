@@ -3,7 +3,13 @@ package pl.cardioscp.rehab.clinic
 import java.time.LocalDate
 import java.time.LocalTime
 
-enum class VitalKind { BLOOD_PRESSURE, WEIGHT, SPO2, PULSE }
+enum class VitalKind {
+    BLOOD_PRESSURE,
+    WEIGHT,
+    SPO2,
+    PULSE,
+    ECG,
+}
 
 data class ClinicMeasurement(
     val id: String,
@@ -12,6 +18,9 @@ data class ClinicMeasurement(
     val valueText: String,
     val measuredAtMs: Long,
     val note: String = "",
+    /** Identyfikator sesji rehab — pomiary z jednej sesji są grupowane. */
+    val sessionGroupId: String? = null,
+    val sessionGroupTitle: String? = null,
 )
 
 enum class DoseStatus { PENDING, TAKEN, SKIPPED }
