@@ -1,19 +1,25 @@
 package pl.cardioscp.rehab.bluetooth
 
 /**
- * Discovery filter for ECG recorders.
+ * Discovery filter for Pro-PLUS ECG recorders.
  *
- * For now any Bluetooth name is accepted — EHO-Mini advertising name is not locked yet.
- * Pass an optional [nameContains] later to narrow the scan without changing call sites.
+ * Advertising name format: `PRO_PLUS_ECG_` + 6-digit serial suffix
+ * (last part of the device serial), e.g. `PRO_PLUS_ECG_740579`.
  */
 object BluetoothDeviceFilter {
-    /** When null/blank, every discovered device name (including empty) matches. */
-    @Volatile
-    var nameContains: String? = null
+    const val NAME_PREFIX = "PRO_PLUS_ECG_"
+    private val NAME_REGEX = Regex("^${Regex.escape(NAME_PREFIX)}\\d{6}$")
 
     fun matches(deviceName: String?): Boolean {
-        val needle = nameContains?.trim().orEmpty()
-        if (needle.isEmpty()) return true
-        return deviceName.orEmpty().contains(needle, ignoreCase = true)
+        val name = deviceName?.trim().orEmpty()
+        if (name.isEmpty()) return false
+        return NAME_REGEX.matches(name)
+    }
+
+    /** Returns the 6-digit serial suffix, or null if the name does not match. */
+    fun serialSuffix(deviceName: String?): String? {
+        val name = deviceName?.trim().orEmpty()
+        if (!matches(name)) return null
+        return name.removePrefix(NAME_PREFIX)
     }
 }

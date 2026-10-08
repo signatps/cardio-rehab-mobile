@@ -47,11 +47,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(connection = EhoMiniConnectionState.PermissionsRequired) }
             return
         }
-        // Scan accepts any BT name until EHO-Mini advertising string is locked.
+        // Discovery filter: PRO_PLUS_ECG_ + 6-digit serial (SPP transport pending).
         _uiState.update {
             it.copy(
                 connection = EhoMiniConnectionState.Error(
-                    "Transport SPP jeszcze niepodłączony — skan przyjmie dowolną nazwę BT.",
+                    "Transport SPP jeszcze niepodłączony — filtr BT: PRO_PLUS_ECG_******.",
                 ),
             )
         }

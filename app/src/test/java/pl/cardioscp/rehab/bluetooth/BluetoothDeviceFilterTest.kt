@@ -1,28 +1,27 @@
 package pl.cardioscp.rehab.bluetooth
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 
 class BluetoothDeviceFilterTest {
-    @Before
-    fun reset() {
-        BluetoothDeviceFilter.nameContains = null
+    @Test
+    fun acceptsProPlusEcgWithSixDigitSerial() {
+        assertTrue(BluetoothDeviceFilter.matches("PRO_PLUS_ECG_740579"))
+        assertEquals("740579", BluetoothDeviceFilter.serialSuffix("PRO_PLUS_ECG_740579"))
     }
 
     @Test
-    fun anyName_acceptedByDefault() {
-        assertTrue(BluetoothDeviceFilter.matches(null))
-        assertTrue(BluetoothDeviceFilter.matches(""))
-        assertTrue(BluetoothDeviceFilter.matches("EHO-Mini"))
-        assertTrue(BluetoothDeviceFilter.matches("random-device"))
-    }
-
-    @Test
-    fun optionalSubstring_narrowsMatch() {
-        BluetoothDeviceFilter.nameContains = "eho"
-        assertTrue(BluetoothDeviceFilter.matches("EHO-Mini-12"))
-        assertFalse(BluetoothDeviceFilter.matches("PulseOx"))
+    fun rejectsWrongPrefixOrSerialLength() {
+        assertFalse(BluetoothDeviceFilter.matches(null))
+        assertFalse(BluetoothDeviceFilter.matches(""))
+        assertFalse(BluetoothDeviceFilter.matches("EHO-Mini"))
+        assertFalse(BluetoothDeviceFilter.matches("PRO_PLUS_ECG_74057"))
+        assertFalse(BluetoothDeviceFilter.matches("PRO_PLUS_ECG_7405799"))
+        assertFalse(BluetoothDeviceFilter.matches("pro_plus_ecg_740579"))
+        assertFalse(BluetoothDeviceFilter.matches("PRO_PLUS_ECG_74A579"))
+        assertNull(BluetoothDeviceFilter.serialSuffix("random"))
     }
 }

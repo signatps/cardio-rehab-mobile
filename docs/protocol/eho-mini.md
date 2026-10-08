@@ -156,14 +156,22 @@ Próbki w `raw/` to **Biosig/SCP-ECG** (`SCPECG` @ offset 16). Aplikacja składa
 
 ## Discovery Bluetooth
 
-Na razie **brak filtra nazwy** — `BluetoothDeviceFilter` akceptuje dowolną nazwę BT (`nameContains = null`).  
-Można później ustawić podciąg (np. `EHO`) bez zmiany API.
+Nazwa reklamowa (zawsze):
+
+```text
+PRO_PLUS_ECG_<NNNNNN>
+```
+
+- stały prefiks `PRO_PLUS_ECG_`
+- `<NNNNNN>` — **dokładnie 6 cyfr**, końcówka numeru seryjnego (np. `740579` → `PRO_PLUS_ECG_740579`)
+
+Implementacja: `BluetoothDeviceFilter` (regex `^PRO_PLUS_ECG_\d{6}$`).
 
 ## Otwarte / do potwierdzenia na EHO-Mini
 
 - [ ] UUID kanału RFCOMM/SPP
 - [x] `ScpInfo` = 4 bajty (uint32 LE) — do potwierdzenia empirycznie
-- [ ] Docelowa nazwa reklamowa BT (obecnie: dowolna)
+- [x] Nazwa reklamowa BT: `PRO_PLUS_ECG_` + 6 cyfr SN
 - [ ] Czy produkcyjny firmware wymaga ACK na `PulseValue` (przyjmujemy TAK wg ProPlus)
 - [ ] Komenda odzysku badań po reconnect (w ProPlus oznaczona „X”)
 - [ ] Mapowanie brandingu EHO-Mini ↔ ten protokół Silvermedia (założenie: ten sam framing)
