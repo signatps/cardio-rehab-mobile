@@ -1,17 +1,20 @@
 package pl.cardioscp.rehab.bluetooth
 
+import pl.cardioscp.rehab.bluetooth.protocol.ProtocolFrame
+
 /**
- * Transport boundary for the Plus EHO-Mini Bluetooth device.
+ * Transport boundary for the Plus EHO-Mini Bluetooth device (Silvermedia framing).
  *
- * Implementation is intentionally a stub until the protocol / firmware dump
- * (services, characteristics, framing, commands) is provided.
+ * Socket / SPP wiring lands once the advertising name and RFCOMM UUID are confirmed.
+ * Protocol codec + session logic live in [pl.cardioscp.rehab.bluetooth.protocol].
  */
 interface EhoMiniDeviceClient {
     suspend fun startScan()
     suspend fun stopScan()
     suspend fun connect(address: String)
     suspend fun disconnect()
-    suspend fun sendCommand(payload: ByteArray)
+    suspend fun sendFrame(frame: ProtocolFrame)
+    suspend fun sendRaw(payload: ByteArray)
 }
 
 class StubEhoMiniDeviceClient : EhoMiniDeviceClient {
@@ -19,5 +22,6 @@ class StubEhoMiniDeviceClient : EhoMiniDeviceClient {
     override suspend fun stopScan() = Unit
     override suspend fun connect(address: String) = Unit
     override suspend fun disconnect() = Unit
-    override suspend fun sendCommand(payload: ByteArray) = Unit
+    override suspend fun sendFrame(frame: ProtocolFrame) = Unit
+    override suspend fun sendRaw(payload: ByteArray) = Unit
 }

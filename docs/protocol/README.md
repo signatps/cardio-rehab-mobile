@@ -1,23 +1,21 @@
-# Protokół EHO-Mini (Plus)
+# Protokół EHO-Mini / Silvermedia
 
-Ten katalog zbiera dokumentację komunikacji Bluetooth z rejestratorem EKG **EHO-Mini**.
+Warstwa techniczna komunikacji Bluetooth z rejestratorem EKG (Plus / Pro-Plus / Silvermedia framing).
 
-## Status
+**Status:** wsad przeanalizowany; codec + maszyna sesji offline w kodzie. GUI / flow ekranów — poza zakresem tej fazy.
 
-**Oczekiwanie na wsad / dokumentację od producenta (Plus).**
+## Wejście
 
-Po otrzymaniu materiałów uzupełnimy m.in.:
+1. Specyfikacja ramek → [`eho-mini.md`](eho-mini.md)
+2. Surowce → [`raw/`](raw/)
+3. Diagramy → [`diagrams/`](diagrams/)
 
-- typ łącza (Classic SPP vs BLE GATT),
-- UUID serwisów / charakterystyk (BLE) lub UUID kanału RFCOMM,
-- framing pakietów, endianness, CRC,
-- komendy start/stop rejestracji, status baterii, streaming próbek,
-- wymagania parowania i bezpieczeństwa.
+## Kod
 
-## Jak dodawać materiały
+`pl.cardioscp.rehab.bluetooth.protocol`:
 
-1. Wrzuć surowy wsad / PDF / logi do `docs/protocol/raw/` (lub załącznik w issue).
-2. Otwórz issue z szablonem **Protocol / device task**.
-3. Zaktualizuj `eho-mini.md` (mapa komend) i odblokuj issues z labelem `blocked`.
+- `Crc16Ccitt`, `FrameCodec`, `FrameStreamParser`
+- typy / payloady komend
+- `OfflineSessionOrchestrator` — flow BPMN (Init, parallel ECG+Pulse, fragmenty SCP, End)
 
-Kod implementujący transport: `pl.cardioscp.rehab.bluetooth`.
+Transport BT (socket) podłączymy osobno po potwierdzeniu SPP/nazwy urządzenia.
