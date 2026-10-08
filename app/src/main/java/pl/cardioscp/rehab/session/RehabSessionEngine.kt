@@ -265,7 +265,8 @@ class RehabSessionEngine(
                     runEcgSlot(phase.label)
                 }
                 TrainingPhaseKind.EXERCISE -> {
-                    runExerciseWithPulse(phase)
+                    val limit = _state.value?.trainingPlan?.limitForCycle(phase.cycle)
+                    runExerciseWithPulse(phase, limit)
                 }
                 TrainingPhaseKind.REST -> {
                     runTimedPhase(phase)
@@ -284,14 +285,25 @@ class RehabSessionEngine(
         }
     }
 
-    private suspend fun runExerciseWithPulse(phase: TrainingPhase) {
+    private suspend fun runExerciseWithPulse(
+        phase: TrainingPhase,
+        limit: CycleHeartRateLimit?,
+    ) {
         pulseWatchJob?.cancel()
         pulseWatchJob = scope.launch {
             sessionController.lastPulseBpm.collect { bpm ->
                 update {
                     val t = it.training ?: return@update it
                     if (t.phase.index != phase.index) return@update it
-                    it.copy(training = t.copy(pulseBpm = bpm))
+                    val cue = HeartRateCoach.evaluate(bpm, limit)
+                    it.copy(
+                        training = t.copy(
+                            pulseBpm = bpm,
+                            heartRateLimit = limit,
+                            heartRateCue = cue,
+                            message = buildExerciseMessage(phase, bpm, limit, cue),
+                        ),
+                    )
                 }
             }
         }
@@ -311,12 +323,15 @@ class RehabSessionEngine(
             if (skipCurrentPhase || abortTraining) break
             update {
                 val t = it.training ?: return@update it
+                val cue = HeartRateCoach.evaluate(t.pulseBpm, limit)
                 it.copy(
                     training = t.copy(
                         phaseElapsedSec = elapsed,
                         phaseRemainingSec = (phase.durationSec - elapsed).coerceAtLeast(0),
                         measuringPulse = true,
-                        message = phase.label + (t.pulseBpm?.let { bpm -> " · $bpm bpm" } ?: ""),
+                        heartRateLimit = limit,
+                        heartRateCue = cue,
+                        message = buildExerciseMessage(phase, t.pulseBpm, limit, cue),
                     ),
                 )
             }
@@ -331,6 +346,18 @@ class RehabSessionEngine(
         pulseWatchJob = null
         sessionController.stop()
         delay(200)
+    }
+
+    private fun buildExerciseMessage(
+        phase: TrainingPhase,
+        bpm: Int?,
+        limit: CycleHeartRateLimit?,
+        cue: HeartRateCoachCue,
+    ): String {
+        val pulsePart = bpm?.takeIf { it > 0 }?.let { "$it bpm" } ?: "oczekiwanie…"
+        val zonePart = limit?.let { " · cel ${it.minBpm}–${it.maxBpm}" }.orEmpty()
+        val cuePart = HeartRateCoach.screenText(cue)?.let { " · $it" }.orEmpty()
+        return "${phase.label} · $pulsePart$zonePart$cuePart"
     }
 
     private suspend fun runTimedPhase(phase: TrainingPhase) {

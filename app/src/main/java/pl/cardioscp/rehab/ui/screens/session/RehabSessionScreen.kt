@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -21,10 +23,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,13 +37,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
+import pl.cardioscp.rehab.session.CycleHeartRateLimit
 import pl.cardioscp.rehab.session.DefaultRehabSurvey
+import pl.cardioscp.rehab.session.HeartRateCoach
+import pl.cardioscp.rehab.session.HeartRateCoachCue
 import pl.cardioscp.rehab.session.RehabStep
 import pl.cardioscp.rehab.session.TrainingPhaseKind
 import pl.cardioscp.rehab.ui.ble.MeasurePopup
 import pl.cardioscp.rehab.ui.components.AnalogGauge
+import pl.cardioscp.rehab.ui.components.CoachBannerColors
+import pl.cardioscp.rehab.ui.components.FlashingCoachBanner
 import pl.cardioscp.rehab.ui.screens.HomeViewModel
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 
@@ -74,7 +85,9 @@ fun RehabSessionScreen(
 
         if (state == null) {
             IntroContent(
-                onStart = { includeWeight -> viewModel.startRehabSession(includeWeight) },
+                onStart = { includeWeight, limits ->
+                    viewModel.startRehabSession(includeWeight, limits)
+                },
             )
             return
         }
@@ -91,7 +104,9 @@ fun RehabSessionScreen(
 
         when (state.step) {
             RehabStep.INTRO -> IntroContent(
-                onStart = { includeWeight -> viewModel.startRehabSession(includeWeight) },
+                onStart = { includeWeight, limits ->
+                    viewModel.startRehabSession(includeWeight, limits)
+                },
             )
             RehabStep.ECG_BASELINE -> {
                 Text(
@@ -202,8 +217,35 @@ fun RehabSessionScreen(
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Spacer(Modifier.height(8.dp))
-                    // Wskaźnik tylko w fazie wysiłku, gdy trwa pomiar tętna z EHO-Mini.
+                    // Wskaźnik + coaching tylko w fazie wysiłku przy pomiarze tętna.
                     if (t.phase.kind == TrainingPhaseKind.EXERCISE && t.measuringPulse) {
+                        t.heartRateLimit?.let { lim ->
+                            Text(
+                                "Cel cyklu ${lim.cycle}: ${lim.minBpm}–${lim.maxBpm} bpm",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = ProPlusColors.Navy,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        val cueText = HeartRateCoach.screenText(t.heartRateCue)
+                        if (cueText != null) {
+                            FlashingCoachBanner(
+                                text = cueText,
+                                accent = when (t.heartRateCue) {
+                                    HeartRateCoachCue.SPEED_UP -> CoachBannerColors.speedUp
+                                    else -> CoachBannerColors.slowDown
+                                },
+                            )
+                            LaunchedEffect(t.heartRateCue, t.phase.index) {
+                                while (true) {
+                                    HeartRateCoach.speakText(t.heartRateCue)?.let { phrase ->
+                                        viewModel.speakHeartRateCue(phrase)
+                                    }
+                                    delay(4_000)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
                         AnalogGauge(
                             value = t.pulseBpm?.takeIf { it > 0 }?.toFloat(),
                             minValue = 40f,
@@ -306,8 +348,17 @@ private fun StepHeader(step: RehabStep) {
 }
 
 @Composable
-private fun IntroContent(onStart: (includeWeight: Boolean) -> Unit) {
+private fun IntroContent(
+    onStart: (includeWeight: Boolean, limits: List<CycleHeartRateLimit>) -> Unit,
+) {
     var includeWeight by remember { mutableStateOf(true) }
+    val defaults = remember { HeartRateCoach.defaultLimits(2) }
+    var cycleMins by remember {
+        mutableStateOf(defaults.map { it.minBpm.toString() })
+    }
+    var cycleMaxs by remember {
+        mutableStateOf(defaults.map { it.maxBpm.toString() })
+    }
     Column(
         Modifier
             .fillMaxWidth()
@@ -330,7 +381,60 @@ private fun IntroContent(onStart: (includeWeight: Boolean) -> Unit) {
             Checkbox(checked = includeWeight, onCheckedChange = { includeWeight = it })
             Text("Niewydolność serca — mierz także wagę")
         }
-        Button(onClick = { onStart(includeWeight) }, modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Limity tętna na cykl (min–max)",
+            style = MaterialTheme.typography.titleMedium,
+            color = ProPlusColors.Navy,
+        )
+        Text(
+            "Pacjent utrzymuje tętno w zakresie. Poniżej → PRZYSPIESZ, powyżej → ZWOLNIJ (ekran + głos).",
+            style = MaterialTheme.typography.bodyMedium,
+            color = ProPlusColors.Muted,
+        )
+        defaults.indices.forEach { idx ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Cykl ${idx + 1}", Modifier.width(64.dp), fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(
+                    value = cycleMins[idx],
+                    onValueChange = { v ->
+                        cycleMins = cycleMins.toMutableList().also { it[idx] = v.filter(Char::isDigit).take(3) }
+                    },
+                    label = { Text("Min") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                OutlinedTextField(
+                    value = cycleMaxs[idx],
+                    onValueChange = { v ->
+                        cycleMaxs = cycleMaxs.toMutableList().also { it[idx] = v.filter(Char::isDigit).take(3) }
+                    },
+                    label = { Text("Max") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
+        }
+        Button(
+            onClick = {
+                val limits = defaults.indices.map { idx ->
+                    val min = cycleMins[idx].toIntOrNull() ?: defaults[idx].minBpm
+                    val max = cycleMaxs[idx].toIntOrNull() ?: defaults[idx].maxBpm
+                    CycleHeartRateLimit(
+                        cycle = idx + 1,
+                        minBpm = min.coerceIn(40, 199),
+                        maxBpm = max.coerceIn(min + 1, 220),
+                    )
+                }
+                onStart(includeWeight, limits)
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text("Rozpocznij sesję")
         }
     }

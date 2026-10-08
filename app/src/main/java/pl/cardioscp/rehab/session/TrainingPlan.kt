@@ -14,6 +14,8 @@ data class TrainingPlan(
     val acquireSec: Int = 5,
     /** Automatyczne dopuszczenie po ankiecie [s]. */
     val admissionWaitSec: Int = 10,
+    /** Limity tętna per cykl (min–max). Brak wpisu = brak coachingu w cyklu. */
+    val heartRateLimits: List<CycleHeartRateLimit> = HeartRateCoach.defaultLimits(2),
 ) {
     init {
         require(cycles >= 1)
@@ -21,7 +23,13 @@ data class TrainingPlan(
         require(restSec >= 5)
         require(acquireSec >= 2)
         require(admissionWaitSec >= 0)
+        heartRateLimits.forEach { lim ->
+            require(lim.cycle in 1..cycles) { "limit cyklu ${lim.cycle} poza 1..$cycles" }
+        }
     }
+
+    fun limitForCycle(cycle: Int): CycleHeartRateLimit? =
+        heartRateLimits.firstOrNull { it.cycle == cycle }
 }
 
 enum class TrainingPhaseKind {

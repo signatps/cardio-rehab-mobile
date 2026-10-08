@@ -37,6 +37,10 @@ data class TrainingLiveState(
     val pulseBpm: Int? = null,
     val message: String = "",
     val pausedForEvent: Boolean = false,
+    /** Aktualny limit tętna cyklu (tylko w fazie wysiłku). */
+    val heartRateLimit: CycleHeartRateLimit? = null,
+    /** Cue coachingu tętna — steruje migającym napisem i TTS. */
+    val heartRateCue: HeartRateCoachCue = HeartRateCoachCue.WAITING,
 )
 
 data class RehabSessionState(

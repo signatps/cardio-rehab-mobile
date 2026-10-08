@@ -220,7 +220,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         MedReminderScheduler.reschedule(application, clinicStore)
     }
 
-    fun startRehabSession(includeWeight: Boolean = true) {
+    fun startRehabSession(
+        includeWeight: Boolean = true,
+        heartRateLimits: List<pl.cardioscp.rehab.session.CycleHeartRateLimit> =
+            pl.cardioscp.rehab.session.HeartRateCoach.defaultLimits(2),
+    ) {
         rehabEngine.start(
             includeWeight = includeWeight,
             plan = TrainingPlan(
@@ -229,9 +233,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 restSec = 15,
                 acquireSec = 5,
                 admissionWaitSec = 10,
+                heartRateLimits = heartRateLimits,
             ),
         )
         rehabEngine.beginBaselineEcg()
+    }
+
+    /** TTS coachingu tętna (PRZYSPIESZ / ZWOLNIJ) — bez spamu przy tym samym cue. */
+    fun speakHeartRateCue(phrase: String) {
+        voiceGreeting?.speak(phrase)
     }
 
     fun cancelRehabSession() = rehabEngine.cancel()
