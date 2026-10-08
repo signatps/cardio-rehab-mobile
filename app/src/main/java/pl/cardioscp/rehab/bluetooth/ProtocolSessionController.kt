@@ -92,7 +92,7 @@ class ProtocolSessionController(
                 orch.start(
                     PulseScenarioOrchestrator.Config(
                         unixTimestampSeconds = System.currentTimeMillis() / 1000L,
-                        samplingHz = 500,
+                        samplingHz = 250,
                         pulseAverageSeconds = 10,
                         pulseIntervalTenths = 10,
                     ),
@@ -122,12 +122,12 @@ class ProtocolSessionController(
                 orch.start(
                     EcgOfflineCreateOrchestrator.Config(
                         unixTimestampSeconds = System.currentTimeMillis() / 1000L,
-                        samplingHz = 500,
+                        samplingHz = 250,
                         pulseAverageSeconds = 10,
                         lookbackSeconds = 0,
                         totalSeconds = 10,
                         userId = userId,
-                        reinitAfterEnd = true,
+                        reinitAfterEnd = false,
                     ),
                 ),
             )
@@ -155,7 +155,7 @@ class ProtocolSessionController(
                 orch.start(
                     ScpDownloadOrchestrator.Config(
                         unixTimestampSeconds = System.currentTimeMillis() / 1000L,
-                        samplingHz = 500,
+                        samplingHz = 250,
                         pulseAverageSeconds = 10,
                     ),
                 ),

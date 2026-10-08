@@ -18,7 +18,7 @@ class EcgOfflineCreateOrchestrator(
         val lookbackSeconds: Int,
         val totalSeconds: Int,
         val userId: String,
-        val reinitAfterEnd: Boolean = true,
+        val reinitAfterEnd: Boolean = false,
     )
 
     private enum class AckKind { INIT, ECG_OFFLINE, END, REINIT, END_AFTER_ERROR }
