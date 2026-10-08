@@ -5,40 +5,41 @@ import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 
 object PayloadCodec {
+    /** SCP-ECG lead codes used by EHO-MINI firmware (`scp.h`). */
+    object ScpLead {
+        const val I: Byte = 1
+        const val II: Byte = 2
+        const val V1: Byte = 3
+    }
+
     /**
-     * Init 0x04 payload.
+     * Init 0x04 payload — lengths accepted by EHO-MINI firmware
+     * (`restor_packets.c` → `is_valid_packet_len`):
+     * - **10** = ts(4)+Hz(2)+pulse(1)+clear(1)+count(1)+1 lead
+     * - **12** = same + count==3 and 3 lead codes
      *
-     * Pro-PLUS ECG firmware validates a fixed length and rejects the Silvermedia
-     * trailing "extra lead count" byte when it is `0` (live log:
-     * `COMMAND 4 … LENGTH IS NOT VALID` for msgLen=9).
-     *
-     * Default wire layout (8 bytes):
-     * `uint32 ts | uint16 samplingHz | uint8 pulseAvgSec | uint8 clearBuffer`
-     *
-     * When [extraLeads] is non-empty, append Silvermedia `count + leads`
-     * (`uint8 count | lead…`) for msgLen = 9 + leads.size.
+     * Default: msgLen=10 with count=1 and lead V1 (matches `CALCULATE_ADDITIONAL_LEADS==0`).
      */
     fun init(
         unixTimestampSeconds: Long,
         samplingHz: Int,
         pulseAverageSeconds: Int,
         clearBuffer: Boolean,
-        extraLeads: ByteArray = ByteArray(0),
+        extraLeads: ByteArray = byteArrayOf(ScpLead.V1),
     ): ByteArray {
-        require(extraLeads.size <= 255)
-        val baseSize = 8
-        val withLeads = extraLeads.isNotEmpty()
+        val leads = if (extraLeads.isEmpty()) byteArrayOf(ScpLead.V1) else extraLeads
+        require(leads.size == 1 || leads.size == 3) {
+            "EHO-MINI Init accepts only 1 lead (msgLen=10) or 3 leads (msgLen=12)"
+        }
         val buf = ByteBuffer
-            .allocate(baseSize + if (withLeads) 1 + extraLeads.size else 0)
+            .allocate(8 + 1 + leads.size)
             .order(ByteOrder.LITTLE_ENDIAN)
         buf.putInt(unixTimestampSeconds.toInt())
         buf.putShort(samplingHz.toShort())
         buf.put(pulseAverageSeconds.toByte())
         buf.put(if (clearBuffer) 0x01 else 0x00)
-        if (withLeads) {
-            buf.put(extraLeads.size.toByte())
-            buf.put(extraLeads)
-        }
+        buf.put(leads.size.toByte())
+        buf.put(leads)
         return buf.array()
     }
 
@@ -66,18 +67,24 @@ object PayloadCodec {
     fun get(infoId: Int): ByteArray = byteArrayOf(infoId.toByte())
 
     /**
-     * SCP Info size is a little-endian uint32 (exactly 4 bytes).
-     * Confirmed for integration; re-verify against the live EHO-Mini if needed.
+     * SCP Info from EHO-MINI (`create_scp_info_done_packet`): msgLen = **7**
+     * `uint32 fileSize | 0x00 | uint16 fileCrc`.
+     * Size is the first 4 bytes (little-endian).
      */
     fun parseScpInfoSize(payload: ByteArray): Long {
-        require(payload.size == 4) {
-            "SCP Info size must be exactly 4 bytes, was ${payload.size}"
+        require(payload.size >= 4) {
+            "SCP Info payload too short: ${payload.size}"
         }
         var size = 0L
         for (i in 0 until 4) {
             size = size or ((payload[i].toLong() and 0xFFL) shl (8 * i))
         }
         return size
+    }
+
+    fun parseScpInfoFileCrc(payload: ByteArray): Int? {
+        if (payload.size < 7) return null
+        return (payload[5].toInt() and 0xFF) or ((payload[6].toInt() and 0xFF) shl 8)
     }
 
     fun parsePulseValue(payload: ByteArray): Int {

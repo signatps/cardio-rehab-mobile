@@ -21,4 +21,4 @@ Warstwa techniczna komunikacji Bluetooth z rejestratorem EKG (Plus / Pro-Plus / 
 - `EcgOfflineCreateOrchestrator` — scenariusz 3
 - `OfflineSessionOrchestrator` — BPMN z transferem SCP
 
-Transport BT: para w ustawieniach Androida → bonded + filtr `PRO_PLUS_ECG_`******; well-known SPP UUID. `ScpInfo` = 4 B.
+Transport BT: bonded `PRO_PLUS_ECG_`****** + SPP. `Init` msgLen 10/12; `ScpInfo` 7 B — wg firmware.

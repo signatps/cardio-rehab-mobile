@@ -28,19 +28,20 @@ class FrameCodecTest {
     }
 
     @Test
-    fun encodeInitPayload_defaultIsEightBytes() {
+    fun encodeInitPayload_defaultIsTenBytes_forEhoMini() {
         val payload = PayloadCodec.init(
             unixTimestampSeconds = 0x6AC78A5D,
             samplingHz = 500,
             pulseAverageSeconds = 10,
             clearBuffer = false,
         )
-        assertEquals(8, payload.size)
+        assertEquals(10, payload.size)
+        assertEquals(1, payload[8].toInt() and 0xFF) // count
+        assertEquals(3, payload[9].toInt() and 0xFF) // V1
         val frame = ProtocolFrame(FrameType.INIT, 1, payload)
         val bytes = FrameCodec.encode(frame)
-        // SOF + hdr + 8 payload + CRC = 16 (device rejected previous 17-byte / msgLen=9 form)
-        assertEquals(16, bytes.size)
-        assertEquals(8, bytes[4].toInt() and 0xFF)
+        assertEquals(18, bytes.size)
+        assertEquals(10, bytes[4].toInt() and 0xFF)
         assertEquals(0, bytes[5].toInt() and 0xFF)
         val again = FrameCodec.decode(bytes)
         assertNotNull(again)
@@ -48,17 +49,19 @@ class FrameCodecTest {
     }
 
     @Test
-    fun encodeInitPayload_withExtraLeads() {
+    fun encodeInitPayload_threeLeadsIsTwelveBytes() {
         val payload = PayloadCodec.init(
             unixTimestampSeconds = 0x7FFFFFFF,
             samplingHz = 500,
             pulseAverageSeconds = 10,
             clearBuffer = true,
-            extraLeads = byteArrayOf(0x01, 0x02),
+            extraLeads = byteArrayOf(
+                PayloadCodec.ScpLead.I,
+                PayloadCodec.ScpLead.II,
+                PayloadCodec.ScpLead.V1,
+            ),
         )
-        assertEquals(11, payload.size)
-        val again = FrameCodec.decode(FrameCodec.encode(ProtocolFrame(FrameType.INIT, 0x0101, payload)))
-        assertNotNull(again)
-        assertTrue(payload.contentEquals(again!!.payload))
+        assertEquals(12, payload.size)
+        assertEquals(3, payload[8].toInt() and 0xFF)
     }
 }

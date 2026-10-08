@@ -47,7 +47,8 @@ class OfflineSessionOrchestratorTest {
             ProtocolFrame(
                 FrameType.SCP_INFO,
                 100,
-                byteArrayOf(5, 0, 0, 0),
+                // firmware msgLen=7: size u32 + pad + crc16
+                byteArrayOf(5, 0, 0, 0, 0, 0x00, 0x00),
             ),
         )
         feed(ProtocolFrame(FrameType.SCP_FRAGMENT, 101, scpBytes))

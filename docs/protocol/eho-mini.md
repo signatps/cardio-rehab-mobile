@@ -65,20 +65,27 @@ Minimalna ramka (pusty payload): 8 bajtów.
 
 ### Init `0x04` payload
 
+Źródło prawdy: firmware EHO-MINI `restor_packets.c` → `is_valid_packet_len`:
+
+```c
+case APP_INIT: ret = (data_packet_len == 10) || (data_packet_len == 12);
+```
+
 | Offset w msg | Pole |
 |--------------|------|
 | 0–3 | Unix timestamp (s, UTC) |
 | 4–5 | sampling Hz (`ushort`) |
 | 6 | okno średniej pulsu [s] |
 | 7 | clear buffer (`0x01` / `0x00`) |
-| 8… | *(opcjonalnie)* `count` + kody odprowadzeń dodatkowych |
+| 8 | `count` odprowadzeń dodatkowych |
+| 9… | kody SCP (`scp.h`: I=1, II=2, V1=3, …) |
 
-**Pro-PLUS ECG (live):** firmware odrzuca Init z `msgLen=9` (sam zerowy bajt `count`) —
-`DATA PACKET LENGTH IS NOT VALID. COMMAND 4`.  
-Dlatego domyślnie wysyłamy **8 bajtów** (bez pola count). Tablicę odprowadzeń doklejamy
-tylko gdy jest niepusta (`msgLen = 9 + n`).
+- **msgLen=10** — `count=1` + 1 kod (domyślnie V1); firmware ustawia I/II stałe + Vx z tego bajtu  
+- **msgLen=12** — `count=3` + 3 kody  
 
-Init startuje ciągły zapis EKG+puls w pamięci urządzenia. Ponowny Init = nowy plik.
+`msgLen=8` i `9` → `DATA PACKET LENGTH IS NOT VALID. COMMAND 4` (potwierdzone logiem).
+
+Init startuje ciągły zapis EKG+puls. Ponowny Init bez `End` → błąd „APP INIT ALREADY SET”.
 
 ### ECG Offline `0x05` payload
 
@@ -93,10 +100,15 @@ Po ACK urządzenie buduje SCP i wysyła `EcgOfflineDone`.
 
 ### SCP Info `0x08`
 
-Rozmiar pliku SCP: **`uint32` little-endian — dokładnie 4 bajty** (`PayloadCodec.parseScpInfoSize`).  
-Dokument źródłowy pisał „6 do 10”; przyjmujemy 4 B i zweryfikujemy na żywym EHO-Mini.
+Firmware `create_scp_info_done_packet`: **msgLen = 7**
 
-Ostatni fragment SCP (brama BPMN): gdy `receivedBytes >= scpSize` z `ScpInfo` (brak flagi w payloadzie fragmentu).
+| Offset | Pole |
+|--------|------|
+| 0–3 | `uint32` file size LE |
+| 4 | `0x00` (padding) |
+| 5–6 | `uint16` CRC pliku SCP LE |
+
+Ostatni fragment SCP: gdy `receivedBytes >= fileSize`.
 
 ### Get / GetAns
 
@@ -181,8 +193,9 @@ Flow połączenia:
 ## Otwarte / do potwierdzenia na EHO-Mini
 
 - [x] Parowanie z poziomu systemu Android (bez custom UUID)
-- [x] `ScpInfo` = 4 bajty (uint32 LE) — do potwierdzenia empirycznie
-- [x] Nazwa reklamowa BT: `PRO_PLUS_ECG_` + 6 cyfr SN
+- [x] `ScpInfo` = 7 bajtów (size4 + pad + crc2) — z firmware
+- [x] `Init` msgLen ∈ {10, 12} — z firmware
+- [x] Nazwa reklamowa BT: `PRO_PLUS_ECG_` + 6 cyfr SN (IMEI końcówka, np. …740579)
 - [ ] Czy produkcyjny firmware wymaga ACK na `PulseValue` (przyjmujemy TAK wg ProPlus)
 - [ ] Komenda odzysku badań po reconnect (w ProPlus oznaczona „X”)
 - [ ] Mapowanie brandingu EHO-Mini ↔ ten protokół Silvermedia (założenie: ten sam framing)

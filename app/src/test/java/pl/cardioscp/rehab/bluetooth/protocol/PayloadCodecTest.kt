@@ -16,18 +16,19 @@ class PayloadCodecTest {
     }
 
     @Test
-    fun scpInfo_sizeLittleEndian_exactlyFourBytes() {
-        assertEquals(90324L, PayloadCodec.parseScpInfoSize(byteArrayOf(0xD4.toByte(), 0x60, 0x01, 0x00)))
-    }
-
-    @Test(expected = IllegalArgumentException::class)
-    fun scpInfo_rejectsWrongLength() {
-        PayloadCodec.parseScpInfoSize(byteArrayOf(1, 2, 3, 4, 5))
+    fun scpInfo_parsesSizeFromSevenByteFirmwarePacket() {
+        // file_size=90324, pad 0x00, crcfile example
+        val payload = byteArrayOf(
+            0xD4.toByte(), 0x60, 0x01, 0x00,
+            0x00,
+            0x12, 0x34,
+        )
+        assertEquals(90324L, PayloadCodec.parseScpInfoSize(payload))
+        assertEquals(0x3412, PayloadCodec.parseScpInfoFileCrc(payload))
     }
 
     @Test
     fun sampleScpFiles_haveScpEcgMagic() {
-        // Guardrail: fixtures in docs/protocol/raw remain SCP-ECG.
         val marker = "SCPECG".toByteArray()
         assertEquals(6, marker.size)
         assertArrayEquals(marker, "SCPECG".toByteArray())
