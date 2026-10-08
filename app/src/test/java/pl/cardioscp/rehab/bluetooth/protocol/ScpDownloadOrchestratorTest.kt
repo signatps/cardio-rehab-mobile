@@ -6,7 +6,7 @@ import org.junit.Test
 
 class ScpDownloadOrchestratorTest {
     @Test
-    fun reassemblesFragmentsIntoSingleCompleteFile() {
+    fun initThenReassemblesFragmentsIntoSingleCompleteFile() {
         val orch = ScpDownloadOrchestrator()
         val events = mutableListOf<ScenarioEvent>()
 
@@ -14,13 +14,19 @@ class ScpDownloadOrchestratorTest {
             events += orch.onFrame(frame)
         }
 
-        events += orch.start()
-        val getScp = outbound(events).single { it.type == FrameType.GET_SCP }
-        assertTrue(outbound(events).any { it.type == FrameType.GET_SCP_INFO })
+        events += orch.start(
+            ScpDownloadOrchestrator.Config(unixTimestampSeconds = 1_700_000_000L),
+        )
+        val init = outbound(events).single { it.type == FrameType.INIT }
+        events.clear()
+
+        feed(ProtocolFrame(FrameType.ACK, init.sequence))
+        val afterInit = outbound(events)
+        assertTrue(afterInit.any { it.type == FrameType.GET_SCP_INFO })
+        val getScp = afterInit.single { it.type == FrameType.GET_SCP }
         events.clear()
 
         feed(ProtocolFrame(FrameType.ACK, getScp.sequence))
-        // size = 5, pad, crc
         feed(
             ProtocolFrame(
                 FrameType.SCP_INFO,
@@ -42,6 +48,10 @@ class ScpDownloadOrchestratorTest {
         events.clear()
 
         feed(ProtocolFrame(FrameType.ACK, done.sequence))
+        val end = outbound(events).single { it.type == FrameType.END }
+        events.clear()
+
+        feed(ProtocolFrame(FrameType.ACK, end.sequence))
         assertTrue(events.any { it is ScenarioEvent.Finished })
         assertEquals(ScpDownloadOrchestrator.Phase.FINISHED, orch.phase)
     }
@@ -50,7 +60,10 @@ class ScpDownloadOrchestratorTest {
     fun missingScp_commandError04() {
         val orch = ScpDownloadOrchestrator()
         val events = mutableListOf<ScenarioEvent>()
-        events += orch.start()
+        events += orch.start(ScpDownloadOrchestrator.Config(unixTimestampSeconds = 1L))
+        val init = outbound(events).single { it.type == FrameType.INIT }
+        events.clear()
+        events += orch.onFrame(ProtocolFrame(FrameType.ACK, init.sequence))
         events.clear()
         events += orch.onFrame(ProtocolFrame(FrameType.COMMAND_ERROR, 1, byteArrayOf(0x04)))
         val failed = events.filterIsInstance<ScenarioEvent.Failed>().single()

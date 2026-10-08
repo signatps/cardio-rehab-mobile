@@ -151,7 +151,15 @@ class ProtocolSessionController(
                     dispatch(orch.onFrame(frame))
                 }
             }
-            dispatch(orch.start())
+            dispatch(
+                orch.start(
+                    ScpDownloadOrchestrator.Config(
+                        unixTimestampSeconds = System.currentTimeMillis() / 1000L,
+                        samplingHz = 500,
+                        pulseAverageSeconds = 10,
+                    ),
+                ),
+            )
         }
     }
 

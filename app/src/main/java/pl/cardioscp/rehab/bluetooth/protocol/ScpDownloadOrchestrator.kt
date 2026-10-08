@@ -3,42 +3,57 @@ package pl.cardioscp.rehab.bluetooth.protocol
 /**
  * Downloads the **complete** SCP file from the device.
  *
- * Wire protocol still uses `0x0A` fragments; this orchestrator reassembles them
- * and only emits [ScenarioEvent.ScpFileReady] once the full file is in memory.
- * Partial chunks are never exposed to the UI.
+ * Firmware requires `app_init_flag` for GetScpInfo / GetScp / ScpDone
+ * (`SEND APP INIT CMD BEFOR APP_GET_SCP_INFO`).
  *
- * Flow: GetScpInfo → GetScp → (ACK each fragment) → ScpFileReady(full) → ScpDone → Finished
+ * Flow: Init → GetScpInfo → GetScp → (ACK each fragment) → ScpFileReady(full)
+ * → ScpDone → End → Finished
+ *
+ * Partial `0x0A` chunks are never exposed — only the reassembled file.
  */
 class ScpDownloadOrchestrator(
     private val commands: CommandFactory = CommandFactory(),
 ) {
-    private enum class AckKind { GET_SCP, SCP_DONE }
+    private enum class AckKind { INIT, GET_SCP, SCP_DONE, END }
 
     enum class Phase { IDLE, RUNNING, FINISHED, FAILED }
 
     var phase: Phase = Phase.IDLE
         private set
 
+    private var config: Config? = null
     private val pendingAcks = mutableMapOf<Int, AckKind>()
     private val scpBuffer = ArrayList<Byte>(64 * 1024)
     private var expectedSize: Long? = null
     private var fileReadyEmitted = false
 
-    fun start(): List<ScenarioEvent> {
+    data class Config(
+        val unixTimestampSeconds: Long,
+        val samplingHz: Int = 500,
+        val pulseAverageSeconds: Int = 10,
+        val clearBuffer: Boolean = false,
+    )
+
+    fun start(config: Config): List<ScenarioEvent> {
         check(phase == Phase.IDLE || phase == Phase.FINISHED || phase == Phase.FAILED)
+        this.config = config
         pendingAcks.clear()
         scpBuffer.clear()
         expectedSize = null
         fileReadyEmitted = false
         phase = Phase.RUNNING
 
-        val out = mutableListOf<ScenarioEvent>()
-        out += ScenarioEvent.Info("Pobieranie całego pliku SCP…")
-        out += ScenarioEvent.Outbound(commands.getScpInfo())
-        val getScp = commands.getScp()
-        pendingAcks[getScp.sequence] = AckKind.GET_SCP
-        out += ScenarioEvent.Outbound(getScp)
-        return out
+        val init = commands.init(
+            config.unixTimestampSeconds,
+            config.samplingHz,
+            config.pulseAverageSeconds,
+            config.clearBuffer,
+        )
+        pendingAcks[init.sequence] = AckKind.INIT
+        return listOf(
+            ScenarioEvent.Info("Init przed pobraniem SCP…"),
+            ScenarioEvent.Outbound(init),
+        )
     }
 
     fun onFrame(frame: ProtocolFrame): List<ScenarioEvent> {
@@ -58,7 +73,18 @@ class ScpDownloadOrchestrator(
                     out,
                 )
             }
-            FrameType.DEVICE_ERROR -> fail("DeviceError podczas pobierania SCP", out)
+            FrameType.DEVICE_ERROR -> {
+                val code = frame.payload.firstOrNull()?.toInt()?.and(0xFF)
+                if (code == 0x01) {
+                    // Electrode alert — ignore during transfer.
+                    out += ScenarioEvent.Info("Uwaga: elektrody (DevError 0x01)")
+                } else {
+                    fail(
+                        "DeviceError 0x${code?.toString(16) ?: "?"} — zwykle brak Init przed GetScp",
+                        out,
+                    )
+                }
+            }
             else -> Unit
         }
         return out
@@ -66,8 +92,21 @@ class ScpDownloadOrchestrator(
 
     private fun handleAck(frame: ProtocolFrame, out: MutableList<ScenarioEvent>) {
         when (pendingAcks.remove(frame.sequence)) {
+            AckKind.INIT -> {
+                out += ScenarioEvent.Info("Pobieranie całego pliku SCP…")
+                out += ScenarioEvent.Outbound(commands.getScpInfo())
+                val getScp = commands.getScp()
+                pendingAcks[getScp.sequence] = AckKind.GET_SCP
+                out += ScenarioEvent.Outbound(getScp)
+            }
             AckKind.GET_SCP -> Unit
             AckKind.SCP_DONE -> {
+                val end = commands.end()
+                pendingAcks[end.sequence] = AckKind.END
+                out += ScenarioEvent.Outbound(end)
+                out += ScenarioEvent.Info("ScpDone OK — End")
+            }
+            AckKind.END -> {
                 phase = Phase.FINISHED
                 out += ScenarioEvent.Finished
             }
@@ -90,14 +129,11 @@ class ScpDownloadOrchestrator(
     }
 
     private fun handleFragment(frame: ProtocolFrame, out: MutableList<ScenarioEvent>) {
-        // Always ACK each fragment (firmware waits).
         out += ScenarioEvent.Outbound(commands.ack(frame.sequence))
         for (b in frame.payload) scpBuffer.add(b)
         val size = expectedSize
         if (size != null) {
-            out += ScenarioEvent.Info(
-                "SCP: ${scpBuffer.size} / $size B",
-            )
+            out += ScenarioEvent.Info("SCP: ${scpBuffer.size} / $size B")
         }
         maybeComplete(out)
     }
@@ -107,7 +143,6 @@ class ScpDownloadOrchestrator(
         if (fileReadyEmitted) return
         if (scpBuffer.size.toLong() < size) return
 
-        // Take exactly the declared file size (drop trailing padding if any).
         val full = ByteArray(size.toInt()) { scpBuffer[it] }
         fileReadyEmitted = true
         out += ScenarioEvent.ScpFileReady(full)
@@ -120,6 +155,8 @@ class ScpDownloadOrchestrator(
 
     private fun fail(reason: String, out: MutableList<ScenarioEvent>) {
         phase = Phase.FAILED
+        // Best-effort End so next scenario can Init cleanly.
+        out += ScenarioEvent.Outbound(commands.end())
         out += ScenarioEvent.Failed(reason)
     }
 }

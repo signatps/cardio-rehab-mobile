@@ -51,6 +51,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _viewerTitle = MutableStateFlow("EKG")
     val viewerTitle: StateFlow<String> = _viewerTitle
 
+    /** Consumed by UI to auto-open waveform after a successful download. */
+    private val _openViewerRequest = MutableStateFlow(0)
+    val openViewerRequest: StateFlow<Int> = _openViewerRequest
+
     private val connectionSlice = combine(
         deviceClient.connectionState,
         permissionsOk,
@@ -152,6 +156,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     lastSavedScpName.value = saved.displayName
                     recordings.value = recordingStore.list()
                     sessionLabel.value = "Zapisano cały SCP: ${saved.displayName}"
+                    openRecording(saved)
+                    _openViewerRequest.value = _openViewerRequest.value + 1
                 }.onFailure {
                     sessionLabel.value = "Błąd zapisu SCP: ${it.message}"
                 }

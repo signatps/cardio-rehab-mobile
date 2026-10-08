@@ -1,6 +1,7 @@
 package pl.cardioscp.rehab.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -29,6 +30,15 @@ fun CardioRehabNavHost(
     val viewerRecording by viewModel.viewerRecording.collectAsStateWithLifecycle()
     val viewerError by viewModel.viewerError.collectAsStateWithLifecycle()
     val viewerTitle by viewModel.viewerTitle.collectAsStateWithLifecycle()
+    val openViewerRequest by viewModel.openViewerRequest.collectAsStateWithLifecycle()
+
+    LaunchedEffect(openViewerRequest) {
+        if (openViewerRequest > 0) {
+            navController.navigate(Routes.ECG_VIEWER) {
+                launchSingleTop = true
+            }
+        }
+    }
 
     NavHost(navController = navController, startDestination = Routes.SPLASH) {
         composable(Routes.SPLASH) {
