@@ -20,13 +20,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Height
 import androidx.compose.material.icons.outlined.HorizontalRule
 import androidx.compose.material.icons.outlined.MedicalServices
-import androidx.compose.material.icons.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material3.DropdownMenu
@@ -66,6 +66,13 @@ import pl.cardioscp.rehab.ui.theme.DeepTeal
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import pl.cardioscp.rehab.ui.theme.Sand
 
+/** Metadane z archiwum sesji — zamiast nazwy pliku SCP w nagłówku przeglądarki. */
+data class EcgViewerBrowserMeta(
+    val sessionNumber: Int,
+    val cycle: Int?,
+    val capturedAtMs: Long,
+)
+
 @Composable
 fun EcgViewerScreen(
     title: String,
@@ -74,6 +81,7 @@ fun EcgViewerScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     showChrome: Boolean = true,
+    browserMeta: EcgViewerBrowserMeta? = null,
 ) {
     val wide = LocalConfiguration.current.screenWidthDp >= 840
     var mmPerSec by remember { mutableIntStateOf(25) }
@@ -111,13 +119,22 @@ fun EcgViewerScreen(
                     }
                 }
             }
-        } else if (recording != null) {
+        } else if (recording != null && browserMeta != null) {
+            Text(
+                browserMetaLine(browserMeta, recording, mmPerMv),
+                style = MaterialTheme.typography.labelLarge,
+                color = DeepTeal,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        } else if (recording != null && title.isNotBlank()) {
             Text(
                 String.format(
-                    "%s · %.1f s · %d Hz",
+                    "%s · %.1f s · %d Hz · %d mm/mV",
                     title,
                     recording.durationSeconds,
                     recording.samplingHz,
+                    mmPerMv,
                 ),
                 style = MaterialTheme.typography.labelLarge,
                 color = DeepTeal,
@@ -234,7 +251,7 @@ fun EcgViewerScreen(
                             mmPerMv = mmPerMv,
                             analysis = analysis,
                             modifier = Modifier
-                                .width(280.dp)
+                                .width(240.dp)
                                 .fillMaxHeight(),
                         )
                     }
@@ -283,6 +300,31 @@ fun EcgViewerScreen(
     }
 }
 
+private fun browserMetaLine(
+    meta: EcgViewerBrowserMeta,
+    recording: ScpEcgRecording,
+    mmPerMv: Int,
+): String {
+    val pl = java.util.Locale.forLanguageTag("pl-PL")
+    val whenLabel = java.text.SimpleDateFormat("d.MM.yyyy HH:mm", pl)
+        .format(java.util.Date(meta.capturedAtMs))
+    val cycleLabel = when (meta.cycle) {
+        null -> "cykl —"
+        0 -> "spoczynek"
+        else -> "cykl ${meta.cycle}"
+    }
+    return String.format(
+        pl,
+        "Sesja %d · %s · %s · %.1f s · %d Hz · %d mm/mV",
+        meta.sessionNumber,
+        cycleLabel,
+        whenLabel,
+        recording.durationSeconds,
+        recording.samplingHz,
+        mmPerMv,
+    )
+}
+
 @Composable
 private fun CompactToolbar(
     filter: EcgPreset,
@@ -301,64 +343,55 @@ private fun CompactToolbar(
     availableLeads: List<Lead>,
     onLead: (Lead) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ToolGlyph(Icons.Outlined.ShowChart, "Surowy", filter == EcgPreset.NONE) {
-                onFilter(EcgPreset.NONE)
-            }
-            ToolGlyph(Icons.Outlined.GraphicEq, "32Hz", filter == EcgPreset.HZ32) {
-                onFilter(EcgPreset.HZ32)
-            }
-            ToolGlyph(Icons.Outlined.Bolt, "50Hz", filter == EcgPreset.HZ50) {
-                onFilter(EcgPreset.HZ50)
-            }
-            ToolGlyph(Icons.Outlined.HorizontalRule, "Izol.", filter == EcgPreset.BASELINE) {
-                onFilter(EcgPreset.BASELINE)
-            }
-            ToolGlyph(Icons.Outlined.MedicalServices, "Klin.", filter == EcgPreset.CLINICAL) {
-                onFilter(EcgPreset.CLINICAL)
-            }
-            ToolDivider()
-            listOf(25, 50).forEach { speed ->
-                ToolGlyph(Icons.Outlined.Speed, "$speed", mmPerSec == speed) {
-                    onSpeed(speed)
-                }
-            }
-            ToolDivider()
-            listOf(5, 10, 20).forEach { gain ->
-                ToolGlyph(Icons.Outlined.Height, "$gain", mmPerMv == gain) {
-                    onGain(gain)
-                }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ToolGlyph(Icons.AutoMirrored.Outlined.ShowChart, "Surowy", filter == EcgPreset.NONE) {
+            onFilter(EcgPreset.NONE)
+        }
+        ToolGlyph(Icons.Outlined.GraphicEq, "32Hz", filter == EcgPreset.HZ32) {
+            onFilter(EcgPreset.HZ32)
+        }
+        ToolGlyph(Icons.Outlined.Bolt, "50Hz", filter == EcgPreset.HZ50) {
+            onFilter(EcgPreset.HZ50)
+        }
+        ToolGlyph(Icons.Outlined.HorizontalRule, "Izol.", filter == EcgPreset.BASELINE) {
+            onFilter(EcgPreset.BASELINE)
+        }
+        ToolGlyph(Icons.Outlined.MedicalServices, "Klin.", filter == EcgPreset.CLINICAL) {
+            onFilter(EcgPreset.CLINICAL)
+        }
+        ToolDivider()
+        listOf(25, 50).forEach { speed ->
+            ToolGlyph(Icons.Outlined.Speed, "$speed", mmPerSec == speed) {
+                onSpeed(speed)
             }
         }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ToolGlyph(Icons.Outlined.Timeline, "R", showR) {
-                onShowR(!showR)
+        ToolDivider()
+        listOf(5, 10, 20).forEach { gain ->
+            ToolGlyph(Icons.Outlined.Height, "$gain", mmPerMv == gain) {
+                onGain(gain)
             }
-            ToolGlyph(Icons.Outlined.MedicalServices, "PQR", selected = showWaveMarks) {
-                onShowWaves(!showWaveMarks)
-            }
-            ToolGlyph(Icons.Outlined.BugReport, "Diag", selected = showDiag) {
-                onShowDiag(!showDiag)
-            }
-            LeadDropdown(
-                selected = analysisLead,
-                available = availableLeads,
-                onSelect = onLead,
-            )
         }
+        ToolDivider()
+        ToolGlyph(Icons.Outlined.Timeline, "R", showR) {
+            onShowR(!showR)
+        }
+        ToolGlyph(Icons.Outlined.MedicalServices, "PQR", selected = showWaveMarks) {
+            onShowWaves(!showWaveMarks)
+        }
+        ToolGlyph(Icons.Outlined.BugReport, "Diag", selected = showDiag) {
+            onShowDiag(!showDiag)
+        }
+        LeadDropdown(
+            selected = analysisLead,
+            available = availableLeads,
+            onSelect = onLead,
+        )
     }
 }
 

@@ -1,6 +1,7 @@
 package pl.cardioscp.rehab.ui.screens.session
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,12 +10,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
@@ -45,6 +48,7 @@ import pl.cardioscp.rehab.session.CycleHeartRateLimit
 import pl.cardioscp.rehab.session.DefaultRehabSurvey
 import pl.cardioscp.rehab.session.HeartRateCoach
 import pl.cardioscp.rehab.session.HeartRateCoachCue
+import pl.cardioscp.rehab.session.HeartRateValueTone
 import pl.cardioscp.rehab.session.RehabStep
 import pl.cardioscp.rehab.session.TrainingPhaseKind
 import pl.cardioscp.rehab.ui.ble.MeasurePopup
@@ -219,23 +223,16 @@ fun RehabSessionScreen(
                     Spacer(Modifier.height(8.dp))
                     // Wskaźnik + coaching tylko w fazie wysiłku przy pomiarze tętna.
                     if (t.phase.kind == TrainingPhaseKind.EXERCISE && t.measuringPulse) {
-                        t.heartRateLimit?.let { lim ->
-                            Text(
-                                "Cel cyklu ${lim.cycle}: ${lim.minBpm}–${lim.maxBpm} bpm",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = ProPlusColors.Navy,
-                                fontWeight = FontWeight.SemiBold,
-                            )
+                        val lim = t.heartRateLimit
+                        val tone = HeartRateCoach.valueTone(t.pulseBpm, lim)
+                        val valueColor = when (tone) {
+                            HeartRateValueTone.IN_ZONE -> ProPlusColors.ResultGood
+                            HeartRateValueTone.NEAR_EDGE -> ProPlusColors.ResultWatch
+                            HeartRateValueTone.OUT_OF_ZONE -> ProPlusColors.ResultAlert
+                            HeartRateValueTone.WAITING -> ProPlusColors.Muted
                         }
                         val cueText = HeartRateCoach.screenText(t.heartRateCue)
                         if (cueText != null) {
-                            FlashingCoachBanner(
-                                text = cueText,
-                                accent = when (t.heartRateCue) {
-                                    HeartRateCoachCue.SPEED_UP -> CoachBannerColors.speedUp
-                                    else -> CoachBannerColors.slowDown
-                                },
-                            )
                             LaunchedEffect(t.heartRateCue, t.phase.index) {
                                 while (true) {
                                     HeartRateCoach.speakText(t.heartRateCue)?.let { phrase ->
@@ -244,21 +241,51 @@ fun RehabSessionScreen(
                                     delay(4_000)
                                 }
                             }
-                            Spacer(Modifier.height(8.dp))
                         }
-                        AnalogGauge(
-                            value = t.pulseBpm?.takeIf { it > 0 }?.toFloat(),
-                            minValue = 40f,
-                            maxValue = 180f,
-                            label = if (t.pulseBpm != null && t.pulseBpm > 0) {
-                                "Tętno z EKG"
-                            } else {
-                                "Oczekiwanie na tętno…"
-                            },
-                            unit = "bpm",
-                            accent = ProPlusColors.Accent,
-                            diameter = 140.dp,
-                        )
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                lim?.let {
+                                    Text(
+                                        "Cel cyklu ${it.cycle}: ${it.minBpm}–${it.maxBpm} bpm",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = ProPlusColors.Navy,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                }
+                                AnalogGauge(
+                                    value = t.pulseBpm?.takeIf { it > 0 }?.toFloat(),
+                                    minValue = 40f,
+                                    maxValue = 180f,
+                                    label = if (t.pulseBpm != null && t.pulseBpm > 0) {
+                                        "Tętno z EKG"
+                                    } else {
+                                        "Oczekiwanie na tętno…"
+                                    },
+                                    unit = "bpm",
+                                    valueColor = valueColor,
+                                    zoneMin = lim?.minBpm?.toFloat(),
+                                    zoneMax = lim?.maxBpm?.toFloat(),
+                                    diameter = 182.dp,
+                                )
+                                if (cueText != null) {
+                                    Spacer(Modifier.height(10.dp))
+                                    FlashingCoachBanner(
+                                        text = cueText,
+                                        accent = when (t.heartRateCue) {
+                                            HeartRateCoachCue.SPEED_UP -> CoachBannerColors.speedUp
+                                            else -> CoachBannerColors.slowDown
+                                        },
+                                        modifier = Modifier.widthIn(max = 320.dp),
+                                    )
+                                }
+                            }
+                        }
                         Spacer(Modifier.height(8.dp))
                     }
                     val total = t.phase.durationSec.coerceAtLeast(1)
@@ -290,11 +317,15 @@ fun RehabSessionScreen(
                         Text(t.message, style = MaterialTheme.typography.bodyMedium)
                     }
                     Spacer(Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = viewModel::reportEcgEvent,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Zdarzenie EKG (pacjent)")
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        OutlinedButton(
+                            onClick = viewModel::reportEcgEvent,
+                            modifier = Modifier.widthIn(min = 200.dp, max = 280.dp),
+                        ) {
+                            Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Komentarz pacjenta")
+                        }
                     }
                     if (t.pausedForEvent) {
                         Spacer(Modifier.height(8.dp))

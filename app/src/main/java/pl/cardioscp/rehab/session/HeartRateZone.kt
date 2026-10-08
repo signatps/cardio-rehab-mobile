@@ -25,7 +25,22 @@ enum class HeartRateCoachCue {
     WAITING,
 }
 
+/** Kolor wartości BPM na wskaźniku. */
+enum class HeartRateValueTone {
+    /** W środku strefy docelowej. */
+    IN_ZONE,
+    /** W strefie, ale blisko min/max. */
+    NEAR_EDGE,
+    /** Poza limitem. */
+    OUT_OF_ZONE,
+    /** Brak pomiaru. */
+    WAITING,
+}
+
 object HeartRateCoach {
+    /** Margines „blisko granicy” (bpm) wewnątrz strefy → żółty. */
+    const val NEAR_EDGE_BPM = 5
+
     fun evaluate(bpm: Int?, limit: CycleHeartRateLimit?): HeartRateCoachCue {
         if (limit == null) return HeartRateCoachCue.WAITING
         val pulse = bpm ?: return HeartRateCoachCue.WAITING
@@ -35,6 +50,20 @@ object HeartRateCoach {
             pulse > limit.maxBpm -> HeartRateCoachCue.SLOW_DOWN
             else -> HeartRateCoachCue.IN_ZONE
         }
+    }
+
+    fun valueTone(
+        bpm: Int?,
+        limit: CycleHeartRateLimit?,
+        nearMargin: Int = NEAR_EDGE_BPM,
+    ): HeartRateValueTone {
+        if (limit == null) return HeartRateValueTone.WAITING
+        val pulse = bpm ?: return HeartRateValueTone.WAITING
+        if (pulse <= 0) return HeartRateValueTone.WAITING
+        if (pulse < limit.minBpm || pulse > limit.maxBpm) return HeartRateValueTone.OUT_OF_ZONE
+        val nearLow = pulse <= limit.minBpm + nearMargin
+        val nearHigh = pulse >= limit.maxBpm - nearMargin
+        return if (nearLow || nearHigh) HeartRateValueTone.NEAR_EDGE else HeartRateValueTone.IN_ZONE
     }
 
     fun screenText(cue: HeartRateCoachCue): String? = when (cue) {

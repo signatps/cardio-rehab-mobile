@@ -455,7 +455,7 @@ class RehabSessionEngine(
                     it.copy(
                         training = t.copy(
                             pausedForEvent = true,
-                            message = "Zdarzenie — przejść do EKG szczytowego / odpoczynku?",
+                            message = "Komentarz pacjenta — przejść do EKG szczytowego / odpoczynku?",
                         ),
                     )
                 }
@@ -465,7 +465,7 @@ class RehabSessionEngine(
                     it.copy(
                         training = t.copy(
                             pausedForEvent = true,
-                            message = "Zdarzenie EKG — zakończyć trening?",
+                            message = "Komentarz pacjenta — zakończyć trening?",
                         ),
                     )
                 }

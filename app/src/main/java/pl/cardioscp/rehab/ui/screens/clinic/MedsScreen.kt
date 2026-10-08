@@ -12,8 +12,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,10 +23,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
 import pl.cardioscp.rehab.clinic.DoseStatus
+import pl.cardioscp.rehab.clinic.MedCatalog
+import pl.cardioscp.rehab.host.MedCatalogLoader
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import java.time.format.DateTimeFormatter
 
@@ -33,8 +38,17 @@ fun MedsScreen(
     clinic: ClinicSnapshot,
     onMarkTaken: (String) -> Unit,
     onAddMedication: (name: String, dose: String, times: List<String>, note: String) -> Unit = { _, _, _, _ -> },
+    onRemoveMedication: (String) -> Unit = {},
 ) {
+    val context = LocalContext.current
     var addOpen by remember { mutableStateOf(false) }
+    var catalogMeta by remember {
+        mutableStateOf(
+            runCatching { MedCatalogLoader.get(context).meta }.getOrNull(),
+        )
+    }
+    var catalogBusy by remember { mutableStateOf(false) }
+    var catalogMessage by remember { mutableStateOf<String?>(null) }
     val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
     Column(
         Modifier
@@ -50,7 +64,29 @@ fun MedsScreen(
             Text("Leki", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
             Button(onClick = { addOpen = true }) { Text("Dodaj lek") }
         }
+        CatalogMetaRow(
+            meta = catalogMeta,
+            busy = catalogBusy,
+            message = catalogMessage,
+            onRefresh = {
+                catalogBusy = true
+                catalogMessage = null
+                runCatching {
+                    val idx = MedCatalogLoader.reloadFromAssets(context)
+                    catalogMeta = idx.meta
+                    catalogMessage =
+                        "Katalog RPL z aplikacji: ${idx.meta.count} pozycji" +
+                            idx.meta.asOf.takeIf { it.isNotBlank() }?.let { " · stan $it" }.orEmpty()
+                }.onFailure {
+                    catalogMessage = "Nie udało się odświeżyć katalogu: ${it.message ?: "błąd"}"
+                }
+                catalogBusy = false
+            },
+        )
         Text("Dawki na dziś", style = MaterialTheme.typography.titleLarge, color = ProPlusColors.Navy)
+        if (clinic.todayDoses.isEmpty()) {
+            Text("Brak dawek na dziś.", color = ProPlusColors.Muted)
+        }
         clinic.todayDoses.forEach { dose ->
             Surface(
                 Modifier.fillMaxWidth(),
@@ -86,19 +122,26 @@ fun MedsScreen(
             }
         }
         Text("Lista leków", style = MaterialTheme.typography.titleLarge, color = ProPlusColors.Navy)
+        if (clinic.medications.isEmpty()) {
+            Text(
+                "Brak leków na tym profilu. Dodaj lek z katalogu RPL (MZ).",
+                color = ProPlusColors.Muted,
+            )
+        }
         clinic.medications.forEach { med ->
             Surface(
                 Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp),
                 border = BorderStroke(1.dp, ProPlusColors.Line),
             ) {
-                Column(Modifier.padding(12.dp)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(med.name, style = MaterialTheme.typography.titleMedium, color = ProPlusColors.Navy)
                     Text(
                         "${med.doseLabel} · ${med.scheduleNote}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = ProPlusColors.Muted,
                     )
+                    TextButton(onClick = { onRemoveMedication(med.id) }) { Text("Usuń") }
                 }
             }
         }
@@ -111,5 +154,54 @@ fun MedsScreen(
                 addOpen = false
             },
         )
+    }
+}
+
+@Composable
+private fun CatalogMetaRow(
+    meta: MedCatalog.Meta?,
+    busy: Boolean,
+    message: String?,
+    onRefresh: () -> Unit,
+) {
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, ProPlusColors.Line),
+        color = ProPlusColors.Surface,
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                if (meta == null) {
+                    "Katalog RPL niedostępny"
+                } else {
+                    "Katalog RPL (MZ) · ${meta.count} pozycji" +
+                        meta.asOf.takeIf { it.isNotBlank() }?.let { " · stan $it" }.orEmpty()
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = ProPlusColors.Navy,
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(
+                    onClick = onRefresh,
+                    enabled = !busy,
+                ) {
+                    Text(if (busy) "Odświeżanie…" else "Odśwież katalog")
+                }
+                Text(
+                    "Zaszyty w aplikacji; opcjonalnie przeładuj z APK.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ProPlusColors.Muted,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (message != null) {
+                Text(message, style = MaterialTheme.typography.bodySmall, color = ProPlusColors.Muted)
+            }
+        }
     }
 }

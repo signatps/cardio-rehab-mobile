@@ -282,6 +282,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         maybeNotifyDueMed()
     }
 
+    fun removeMedication(id: String) {
+        if (!clinicStore.removeMedication(id)) return
+        _clinic.value = clinicStore.snapshot()
+        MedReminderScheduler.reschedule(getApplication(), clinicStore)
+    }
+
     fun addDisease(
         name: String,
         icd: String,

@@ -78,6 +78,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // JVM unit tests: Android stub of org.json is incomplete.
+    testImplementation("org.json:json:20240303")
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

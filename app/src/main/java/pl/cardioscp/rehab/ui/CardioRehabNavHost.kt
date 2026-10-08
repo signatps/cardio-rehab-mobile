@@ -100,6 +100,7 @@ fun CardioRehabNavHost(
                         clinic = clinic,
                         onMarkTaken = viewModel::markDoseTaken,
                         onAddMedication = viewModel::addMedication,
+                        onRemoveMedication = viewModel::removeMedication,
                     )
                     AppDestination.DISEASES -> DiseasesScreen(
                         clinic = clinic,

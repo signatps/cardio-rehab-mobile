@@ -96,6 +96,15 @@ class ClinicDemoStore(context: Context) {
         return med
     }
 
+    fun removeMedication(id: String): Boolean {
+        val removed = medications.firstOrNull { it.id == id } ?: return false
+        medications = medications.filterNot { it.id == id }
+        doses = doses.filterNot { it.drugName == removed.name }
+        syncMedsDayPlan()
+        persist()
+        return true
+    }
+
     fun addDisease(
         name: String,
         icd: String,
@@ -417,25 +426,11 @@ class ClinicDemoStore(context: Context) {
         )
     }
 
-    private fun defaultMedications() = listOf(
-        Medication("med1", "Bisoprolol", "5 mg", "08:00 rano", times = listOf("08:00")),
-        Medication("med2", "Ramipril", "5 mg", "08:00 rano", times = listOf("08:00")),
-        Medication("med3", "Furosemid", "40 mg", "08:30 rano", times = listOf("08:30")),
-        Medication("med4", "ASA", "75 mg", "20:00 wieczór", times = listOf("20:00")),
-    )
+    private fun defaultMedications(): List<Medication> = emptyList()
 
-    private fun defaultDoses() = listOf(
-        MedDose("d1", "Bisoprolol", "5 mg", LocalTime.of(8, 0), DoseStatus.TAKEN),
-        MedDose("d2", "Ramipril", "5 mg", LocalTime.of(8, 0), DoseStatus.TAKEN),
-        MedDose("d3", "Furosemid", "40 mg", LocalTime.of(8, 30), DoseStatus.PENDING),
-        MedDose("d4", "ASA", "75 mg", LocalTime.of(20, 0), DoseStatus.PENDING),
-    )
+    private fun defaultDoses(): List<MedDose> = emptyList()
 
-    private fun defaultDiseases() = listOf(
-        Disease("dis1", "Niewydolność serca (HFrEF)", "I50.1", DiseaseStatus.AKTUALNA, "2023-04"),
-        Disease("dis2", "Nadciśnienie tętnicze", "I10", DiseaseStatus.PRZEWLEKLA, "2019-11"),
-        Disease("dis3", "Zawał mięśnia sercowego", "I21", DiseaseStatus.HISTORYCZNA, "2023-03"),
-    )
+    private fun defaultDiseases(): List<Disease> = emptyList()
 
     private fun defaultSessions(): List<PlannedSession> {
         val base = mutableListOf(
@@ -494,15 +489,13 @@ class ClinicDemoStore(context: Context) {
     }
 
     private fun defaultDayPlan() = listOf(
-        DayPlanItem("dose-d1", LocalTime.of(8, 0), "Leki rano", "Bisoprolol 5 mg, Ramipril 5 mg", done = true),
-        DayPlanItem("dose-d3", LocalTime.of(8, 30), "Furosemid", "40 mg", done = false),
         DayPlanItem("vitals", LocalTime.of(9, 0), "Pomiary", "Ciśnienie, waga", done = false),
         DayPlanItem("session", LocalTime.of(10, 0), "Sesja rehabilitacji", "Trening sekwencyjny 2×15 s", done = false),
-        DayPlanItem("dose-d4", LocalTime.of(20, 0), "ASA", "75 mg wieczorem", done = false),
     )
 
     companion object {
         private const val PREFS = "clinic_demo"
-        private const val KEY_STATE = "state_v1"
+        /** v2 — puste leki/choroby (bez seedów testowych). */
+        private const val KEY_STATE = "state_v2"
     }
 }

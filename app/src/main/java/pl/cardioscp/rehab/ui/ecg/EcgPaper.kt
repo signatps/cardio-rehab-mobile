@@ -584,25 +584,6 @@ fun AveragePqrPanel(
                     Text(value, style = MaterialTheme.typography.labelSmall, color = EcgUiColors.Ink)
                 }
             }
-            analysis.measurementReasons().take(4).forEach { (name, reason) ->
-                Text(
-                    "$name: $reason",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = EcgUiColors.Muted,
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                )
-            }
-            if (average.unavailableReason != null && average.beatCount == 0) {
-                Text(
-                    average.unavailableReason!!,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = EcgUiColors.Muted,
-                    maxLines = 3,
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                )
-            }
         }
     }
 }
