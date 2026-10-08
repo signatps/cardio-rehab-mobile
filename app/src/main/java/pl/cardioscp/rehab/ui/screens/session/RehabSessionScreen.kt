@@ -232,11 +232,38 @@ fun RehabSessionScreen(
                             TrainingPhaseKind.ECG_REST_START -> "Akwizycja EKG spoczynkowego"
                             TrainingPhaseKind.EXERCISE -> "Ćwicz — pomiar tętna z EHO-Mini"
                             TrainingPhaseKind.ECG_PEAK -> "Akwizycja EKG w szczycie wysiłku"
-                            TrainingPhaseKind.REST -> "Odpoczynek"
+                            TrainingPhaseKind.REST -> "Odpoczynek — tętno z EHO-Mini"
                         },
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Spacer(Modifier.height(8.dp))
+                    // Odpoczynek: samo tętno liczbą (bez wskaźnika analogowego / coachingu).
+                    if (t.phase.kind == TrainingPhaseKind.REST && t.measuringPulse) {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(
+                                "Tętno",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = ProPlusColors.Muted,
+                            )
+                            Text(
+                                t.pulseBpm?.takeIf { it > 0 }?.toString() ?: "—",
+                                style = MaterialTheme.typography.displayMedium,
+                                color = ProPlusColors.Navy,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                "bpm",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = ProPlusColors.Muted,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
                     // Wskaźnik + coaching tylko w fazie wysiłku przy pomiarze tętna.
                     if (t.phase.kind == TrainingPhaseKind.EXERCISE && t.measuringPulse) {
                         val lim = t.heartRateLimit
@@ -456,9 +483,11 @@ private fun IntroContent(
                 }
                 onStart(includeWeight, limits)
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .widthIn(min = 160.dp, max = 220.dp),
         ) {
-            Text("Rozpocznij sesję")
+            Text("Rozpocznij sesję", style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -556,42 +585,32 @@ private fun HeartRateLimitStepper(
     onMinChange: (Int) -> Unit,
     onMaxChange: (Int) -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, ProPlusColors.Line),
-        color = ProPlusColors.Surface,
-        modifier = Modifier.fillMaxWidth(),
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(
-            Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                Icons.Outlined.Favorite,
-                contentDescription = null,
-                tint = ProPlusColors.Accent,
-                modifier = Modifier.size(20.dp),
-            )
-            Text(
-                "C$cycle",
-                fontWeight = FontWeight.Bold,
-                color = ProPlusColors.Navy,
-                modifier = Modifier.width(28.dp),
-            )
-            CompactBpmStepper(
-                value = minBpm,
-                onChange = onMinChange,
-                contentDescription = "Min cykl $cycle",
-            )
-            Text("–", color = ProPlusColors.Muted, fontWeight = FontWeight.Bold)
-            CompactBpmStepper(
-                value = maxBpm,
-                onChange = onMaxChange,
-                contentDescription = "Max cykl $cycle",
-            )
-            Text("bpm", style = MaterialTheme.typography.labelSmall, color = ProPlusColors.Muted)
-        }
+        Text(
+            "Cykl $cycle",
+            fontWeight = FontWeight.Bold,
+            color = ProPlusColors.Navy,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.width(64.dp),
+        )
+        CompactBpmStepper(
+            value = minBpm,
+            onChange = onMinChange,
+            contentDescription = "Min cykl $cycle",
+            boundLabel = "MIN",
+        )
+        CompactBpmStepper(
+            value = maxBpm,
+            onChange = onMaxChange,
+            contentDescription = "Max cykl $cycle",
+            boundLabel = "MAX",
+        )
     }
 }
 
@@ -600,36 +619,46 @@ private fun CompactBpmStepper(
     value: Int,
     onChange: (Int) -> Unit,
     contentDescription: String,
+    boundLabel: String,
 ) {
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        border = BorderStroke(1.dp, ProPlusColors.Line),
-        color = ProPlusColors.Bg,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 2.dp),
-        ) {
-            IconButton(
-                onClick = { onChange(value - 1) },
-                modifier = Modifier.size(32.dp),
-            ) {
-                Icon(Icons.Outlined.Remove, contentDescription = "Zmniejsz $contentDescription")
-            }
-            Text(
-                "$value",
-                fontWeight = FontWeight.Bold,
-                color = ProPlusColors.Navy,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.width(32.dp),
-                style = MaterialTheme.typography.titleMedium,
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                Icons.Outlined.Favorite,
+                contentDescription = null,
+                tint = ProPlusColors.Accent,
+                modifier = Modifier.size(18.dp),
             )
-            IconButton(
-                onClick = { onChange(value + 1) },
-                modifier = Modifier.size(32.dp),
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = "Zwiększ $contentDescription")
-            }
+            Text(
+                boundLabel,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = ProPlusColors.Accent,
+                lineHeight = 11.sp,
+            )
+        }
+        IconButton(
+            onClick = { onChange(value - 1) },
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(Icons.Outlined.Remove, contentDescription = "Zmniejsz $contentDescription")
+        }
+        Text(
+            "$value",
+            fontWeight = FontWeight.Bold,
+            color = ProPlusColors.Navy,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(36.dp),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        IconButton(
+            onClick = { onChange(value + 1) },
+            modifier = Modifier.size(32.dp),
+        ) {
+            Icon(Icons.Outlined.Add, contentDescription = "Zwiększ $contentDescription")
         }
     }
 }
@@ -641,64 +670,91 @@ private fun SurveyContent(
     onSubmit: () -> Unit,
 ) {
     Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
             "Ankieta przed treningiem",
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             color = ProPlusColors.Navy,
+            fontWeight = FontWeight.SemiBold,
         )
         Text(
-            "Pogrubiona odpowiedź to ścieżka kwalifikująca; inna dyskwalifikuje.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            "Pogrubiona = kwalifikuje",
+            style = MaterialTheme.typography.labelSmall,
+            color = ProPlusColors.Muted,
         )
         DefaultRehabSurvey.questions.forEach { q ->
-            Column(Modifier.fillMaxWidth()) {
-                Text(q.text, style = MaterialTheme.typography.bodyLarge)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val yesSelected = answers[q.id] == true
-                    val noSelected = answers[q.id] == false
-                    Row(
-                        Modifier
-                            .selectable(
-                                selected = yesSelected,
-                                onClick = { onAnswer(q.id, true) },
-                                role = Role.RadioButton,
-                            )
-                            .padding(end = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = yesSelected, onClick = { onAnswer(q.id, true) })
-                        Text(
-                            "TAK",
-                            fontWeight = if (q.safeAnswerYes) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    }
-                    Row(
-                        Modifier.selectable(
-                            selected = noSelected,
-                            onClick = { onAnswer(q.id, false) },
-                            role = Role.RadioButton,
-                        ),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = noSelected, onClick = { onAnswer(q.id, false) })
-                        Text(
-                            "NIE",
-                            fontWeight = if (!q.safeAnswerYes) FontWeight.Bold else FontWeight.Normal,
-                        )
-                    }
-                }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    q.text,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ProPlusColors.Navy,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 2,
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                )
+                val yesSelected = answers[q.id] == true
+                val noSelected = answers[q.id] == false
+                SurveyAnswerChip(
+                    label = "TAK",
+                    selected = yesSelected,
+                    preferred = q.safeAnswerYes,
+                    onClick = { onAnswer(q.id, true) },
+                )
+                SurveyAnswerChip(
+                    label = "NIE",
+                    selected = noSelected,
+                    preferred = !q.safeAnswerYes,
+                    onClick = { onAnswer(q.id, false) },
+                )
             }
-            HorizontalDivider()
         }
-        Button(onClick = onSubmit, modifier = Modifier.fillMaxWidth()) {
-            Text("Wyślij ankietę")
+        Button(
+            onClick = onSubmit,
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .widthIn(min = 160.dp, max = 240.dp)
+                .padding(top = 4.dp),
+        ) {
+            Text("Wyślij ankietę", style = MaterialTheme.typography.labelLarge)
         }
+    }
+}
+
+@Composable
+private fun SurveyAnswerChip(
+    label: String,
+    selected: Boolean,
+    preferred: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(8.dp),
+        color = when {
+            selected -> ProPlusColors.Accent.copy(alpha = 0.18f)
+            else -> ProPlusColors.Surface
+        },
+        border = BorderStroke(
+            1.dp,
+            if (selected) ProPlusColors.Accent else ProPlusColors.Line,
+        ),
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (preferred || selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) ProPlusColors.Accent else ProPlusColors.Navy,
+        )
     }
 }
 

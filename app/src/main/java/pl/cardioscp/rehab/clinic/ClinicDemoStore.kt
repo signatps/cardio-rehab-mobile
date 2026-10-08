@@ -106,11 +106,13 @@ class ClinicDemoStore(context: Context) {
         status: DiseaseStatus,
         diagnosedLabel: String,
         note: String = "",
+        codingSystem: String = "ICD-10",
     ): Disease {
         val disease = Disease(
             id = UUID.randomUUID().toString(),
             name = name.trim(),
             icd = icd.trim(),
+            codingSystem = codingSystem.trim().ifBlank { "ICD-10" },
             status = status,
             diagnosedLabel = diagnosedLabel.trim().ifBlank {
                 LocalDate.now().toString().take(7)
@@ -343,6 +345,7 @@ class ClinicDemoStore(context: Context) {
                         .put("id", d.id)
                         .put("name", d.name)
                         .put("icd", d.icd)
+                        .put("codingSystem", d.codingSystem)
                         .put("status", d.status.name)
                         .put("diagnosedLabel", d.diagnosedLabel)
                         .put("note", d.note),
@@ -407,6 +410,8 @@ class ClinicDemoStore(context: Context) {
                                 id = o.getString("id"),
                                 name = o.getString("name"),
                                 icd = o.optString("icd"),
+                                codingSystem = o.optString("codingSystem", "ICD-10")
+                                    .ifBlank { "ICD-10" },
                                 status = DiseaseStatus.valueOf(o.getString("status")),
                                 diagnosedLabel = o.optString("diagnosedLabel"),
                                 note = o.optString("note"),

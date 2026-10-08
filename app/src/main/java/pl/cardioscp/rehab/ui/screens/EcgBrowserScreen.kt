@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import pl.cardioscp.rehab.session.ArchivedEcgSlot
 import pl.cardioscp.rehab.session.ArchivedRehabSession
+import pl.cardioscp.rehab.session.DefaultRehabSurvey
 import pl.cardioscp.rehab.session.RehabSessionArchive
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import java.text.SimpleDateFormat
@@ -456,50 +457,103 @@ private fun SurveyDetailPanel(session: ArchivedRehabSession) {
     val whenLabel = SimpleDateFormat("d.MM.yyyy HH:mm", Locale.forLanguageTag("pl-PL"))
         .format(Date(session.startedAtMs))
     val (title, color) = when (session.surveyPassed) {
-        true -> "PASS — kwalifikacja pozytywna" to ProPlusColors.ResultGood
-        false -> "FAIL — dyskwalifikacja" to ProPlusColors.ResultAlert
-        null -> "Brak wyniku ankiety" to ProPlusColors.Muted
+        true -> "PASS" to ProPlusColors.ResultGood
+        false -> "FAIL" to ProPlusColors.ResultAlert
+        null -> "Brak wyniku" to ProPlusColors.Muted
     }
+    val answers = session.surveyAnswers
     Column(
         Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            "Sesja ${session.sessionNumber} · ankieta kwalifikacyjna · $whenLabel",
-            style = MaterialTheme.typography.labelLarge,
-            color = ProPlusColors.Navy,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Surface(
+        Row(
             Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, color.copy(alpha = 0.4f)),
-            color = color.copy(alpha = 0.08f),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(
-                Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            Text(
+                "Sesja ${session.sessionNumber} · ankieta · $whenLabel",
+                style = MaterialTheme.typography.labelMedium,
+                color = ProPlusColors.Navy,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = color.copy(alpha = 0.14f),
+                border = BorderStroke(1.dp, color.copy(alpha = 0.45f)),
             ) {
-                Icon(
-                    when (session.surveyPassed) {
-                        true -> Icons.Outlined.CheckCircle
-                        false -> Icons.Outlined.Cancel
-                        null -> Icons.Outlined.Assignment
-                    },
-                    contentDescription = null,
-                    tint = color,
-                    modifier = Modifier.size(48.dp),
-                )
-                Text(
-                    title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = color,
-                    textAlign = TextAlign.Center,
-                )
+                Row(
+                    Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        when (session.surveyPassed) {
+                            true -> Icons.Outlined.CheckCircle
+                            false -> Icons.Outlined.Cancel
+                            null -> Icons.Outlined.Assignment
+                        },
+                        contentDescription = null,
+                        tint = color,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = color,
+                    )
+                }
+            }
+        }
+        if (answers.isEmpty()) {
+            Text("Brak zapisanych odpowiedzi.", color = ProPlusColors.Muted)
+        } else {
+            DefaultRehabSurvey.questions.forEach { q ->
+                val ans = answers[q.id]
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        q.text,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ProPlusColors.Navy,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2,
+                        fontSize = 12.sp,
+                        lineHeight = 14.sp,
+                    )
+                    val ansLabel = when (ans) {
+                        true -> "TAK"
+                        false -> "NIE"
+                        null -> "—"
+                    }
+                    val ansColor = when {
+                        ans == null -> ProPlusColors.Muted
+                        ans == q.safeAnswerYes -> ProPlusColors.ResultGood
+                        else -> ProPlusColors.ResultAlert
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = ansColor.copy(alpha = 0.14f),
+                    ) {
+                        Text(
+                            ansLabel,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = ansColor,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
             }
         }
     }

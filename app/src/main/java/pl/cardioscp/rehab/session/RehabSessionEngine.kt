@@ -251,7 +251,8 @@ class RehabSessionEngine(
                         message = phase.label,
                         acquiringEcg = phase.kind == TrainingPhaseKind.ECG_REST_START ||
                             phase.kind == TrainingPhaseKind.ECG_PEAK,
-                        measuringPulse = phase.kind == TrainingPhaseKind.EXERCISE,
+                        measuringPulse = phase.kind == TrainingPhaseKind.EXERCISE ||
+                            phase.kind == TrainingPhaseKind.REST,
                     ),
                     statusMessage = phase.label,
                     busy = phase.kind == TrainingPhaseKind.ECG_REST_START ||
@@ -269,7 +270,7 @@ class RehabSessionEngine(
                     runExerciseWithPulse(phase, limit)
                 }
                 TrainingPhaseKind.REST -> {
-                    runTimedPhase(phase)
+                    runRestWithPulse(phase)
                 }
             }
         }
@@ -371,6 +372,66 @@ class RehabSessionEngine(
         val zonePart = limit?.let { " · cel ${it.minBpm}–${it.maxBpm}" }.orEmpty()
         val cuePart = HeartRateCoach.screenText(cue)?.let { " · $it" }.orEmpty()
         return "${phase.label} · $pulsePart$zonePart$cuePart"
+    }
+
+    /** Odpoczynek z pomiarem tętna (bez limitu / coachingu — tylko liczba w UI). */
+    private suspend fun runRestWithPulse(phase: TrainingPhase) {
+        pulseWatchJob?.cancel()
+        pulseWatchJob = scope.launch {
+            sessionController.lastPulseBpm.collect { bpm ->
+                update {
+                    val t = it.training ?: return@update it
+                    if (t.phase.index != phase.index) return@update it
+                    val pulsePart = bpm?.takeIf { v -> v > 0 }?.let { "$it bpm" } ?: "oczekiwanie…"
+                    it.copy(
+                        training = t.copy(
+                            pulseBpm = bpm,
+                            measuringPulse = true,
+                            heartRateLimit = null,
+                            heartRateCue = HeartRateCoachCue.WAITING,
+                            message = "${phase.label} · $pulsePart",
+                        ),
+                    )
+                }
+            }
+        }
+        val pulseJob = scope.launch {
+            runCatching {
+                sessionController.runPulseFor(phase.durationSec)
+            }.onFailure { e ->
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                update {
+                    it.copy(statusMessage = "Puls: ${e.message ?: "błąd"} — kończę odpoczynek")
+                }
+            }
+        }
+        for (elapsed in 0 until phase.durationSec) {
+            if (skipCurrentPhase || abortTraining) break
+            update {
+                val t = it.training ?: return@update it
+                val pulsePart = t.pulseBpm?.takeIf { v -> v > 0 }?.let { "$it bpm" } ?: "oczekiwanie…"
+                it.copy(
+                    training = t.copy(
+                        phaseElapsedSec = elapsed + 1,
+                        phaseRemainingSec = (phase.durationSec - elapsed - 1).coerceAtLeast(0),
+                        measuringPulse = true,
+                        acquiringEcg = false,
+                        pausedForEvent = false,
+                        message = "${phase.label} · $pulsePart",
+                    ),
+                )
+            }
+            delay(1_000)
+        }
+        if (skipCurrentPhase || abortTraining) {
+            pulseJob.cancel()
+            sessionController.stop()
+        }
+        runCatching { pulseJob.join() }
+        pulseWatchJob?.cancel()
+        pulseWatchJob = null
+        sessionController.stop()
+        delay(200)
     }
 
     private suspend fun runTimedPhase(phase: TrainingPhase) {

@@ -351,8 +351,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         status: DiseaseStatus,
         diagnosed: String,
         note: String,
+        codingSystem: String = "ICD-10",
     ) {
-        clinicStore.addDisease(name, icd, status, diagnosed, note)
+        clinicStore.addDisease(name, icd, status, diagnosed, note, codingSystem)
         _clinic.value = clinicStore.snapshot()
     }
 
@@ -431,6 +432,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     pl.cardioscp.rehab.session.SurveyOutcome.DISQUALIFIED -> false
                     pl.cardioscp.rehab.session.SurveyOutcome.INCOMPLETE -> null
                 },
+                surveyAnswers = live.surveyAnswers,
                 cycleHrSummaries = live.cycleHrSummaries,
             )
             refreshEcgArchive()

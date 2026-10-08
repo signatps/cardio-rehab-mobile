@@ -10,7 +10,7 @@ Repozytorium: [signatps/cardio-rehab-mobile](https://github.com/signatps/cardio-
 
 Działa połączenie **Bluetooth Classic SPP** z `PRO_PLUS_ECG_******` oraz **BLE** do ciśnienia/wagi (port z mobile-DSD).
 
-UI w stylu **CardioSCP / mobile-DSD**: lewe menu + prawa ramka treści, kalendarz sesji, plan dnia, leki, choroby, pomiary (demo lokalne). **Leki** — wyszukiwanie w zaszytym katalogu **RPL (MZ)** (`assets/rpl_medications.json.gz`, jak w DSD-mobile), opcjonalne odświeżenie z APK, usuwanie pozycji. Na pulpicie **powitanie głosowe** (TTS): imię + plan leków i sesji rehab; po wykonanej sesji przypomina tylko o lekach.
+UI w stylu **CardioSCP / mobile-DSD**: lewe menu + prawa ramka treści, kalendarz sesji, plan dnia, leki, choroby, pomiary (demo lokalne). **Leki** — wyszukiwanie w zaszytym katalogu **RPL (MZ)** (`assets/rpl_medications.json.gz`, jak w DSD-mobile), opcjonalne odświeżenie z APK, usuwanie pozycji. **Choroby** — katalog **ICD-10 PL + ICD-9 NFZ** (`assets/icd_pl.json.gz`), filtry ICD-9/10, opcjonalna aktualizacja z sieci. Plan dnia: przełącznik lista / kalendarz godzin. Na pulpicie **powitanie głosowe** (TTS): imię + plan leków i sesji rehab; po wykonanej sesji przypomina tylko o lekach.
 
 **Sesja rehabilitacji** (po SPP): EKG spoczynkowe → ciśnienie BLE → waga BLE (gdy HF) → ankieta kwalifikacyjna → trening sekwencyjny interwałowy (domyślnie 2×15 s wysiłek / 15 s odpoczynek, akwizycja EKG 5 s) → podsumowanie z przeglądem EKG z sesji.
 

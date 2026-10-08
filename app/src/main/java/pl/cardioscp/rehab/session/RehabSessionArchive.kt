@@ -29,6 +29,8 @@ data class ArchivedRehabSession(
     val weightSummary: String? = null,
     /** Wynik ankiety: true = pass, false = fail, null = brak. */
     val surveyPassed: Boolean? = null,
+    /** Odpowiedzi ankiety: id pytania → TAK/NIE. */
+    val surveyAnswers: Map<String, Boolean> = emptyMap(),
     /** Limity tętna per cykl po treningu. */
     val cycleHrSummaries: List<CycleHrSummary> = emptyList(),
 )
@@ -58,6 +60,7 @@ class RehabSessionArchive(
         bloodPressureSummary: String? = null,
         weightSummary: String? = null,
         surveyPassed: Boolean? = null,
+        surveyAnswers: Map<String, Boolean> = emptyMap(),
         cycleHrSummaries: List<CycleHrSummary> = emptyList(),
     ): ArchivedRehabSession? {
         if (entries.isEmpty()) return null
@@ -78,6 +81,7 @@ class RehabSessionArchive(
             bloodPressureSummary = bloodPressureSummary,
             weightSummary = weightSummary,
             surveyPassed = surveyPassed,
+            surveyAnswers = surveyAnswers,
             cycleHrSummaries = cycleHrSummaries.sortedBy { it.cycle },
         )
         sessions = sessions + archived
@@ -116,6 +120,7 @@ class RehabSessionArchive(
                 bloodPressureSummary = "128/82 · 72/min",
                 weightSummary = "78.2 kg",
                 surveyPassed = true,
+                surveyAnswers = demoSurveyAnswers(),
                 cycleHrSummaries = demoCycleHr(index),
             )
         }
@@ -141,7 +146,8 @@ class RehabSessionArchive(
                 s.weightSummary == null &&
                 s.surveyPassed == null
             val needsHr = s.cycleHrSummaries.isEmpty()
-            if (needsExtras || needsHr || sessionChanged) {
+            val needsSurveyAnswers = s.surveyAnswers.isEmpty() && (s.surveyPassed != null || needsExtras)
+            if (needsExtras || needsHr || needsSurveyAnswers || sessionChanged) {
                 changed = true
                 s.copy(
                     ecgs = newEcgs,
@@ -151,6 +157,7 @@ class RehabSessionArchive(
                         ?: if (needsExtras) "78.2 kg" else null,
                     surveyPassed = s.surveyPassed
                         ?: if (needsExtras) true else null,
+                    surveyAnswers = if (needsSurveyAnswers) demoSurveyAnswers() else s.surveyAnswers,
                     cycleHrSummaries = if (needsHr) demoCycleHr(s.sessionNumber) else s.cycleHrSummaries,
                 )
             } else {
@@ -175,6 +182,12 @@ class RehabSessionArchive(
                     .put("bloodPressureSummary", s.bloodPressureSummary)
                     .put("weightSummary", s.weightSummary)
                     .put("surveyPassed", s.surveyPassed)
+                    .put(
+                        "surveyAnswers",
+                        JSONObject().also { ans ->
+                            s.surveyAnswers.forEach { (k, v) -> ans.put(k, v) }
+                        },
+                    )
                     .put(
                         "cycleHr",
                         JSONArray().also { hrArr ->
@@ -234,6 +247,16 @@ class RehabSessionArchive(
                         !o.has("surveyPassed") || o.isNull("surveyPassed") -> null
                         else -> o.getBoolean("surveyPassed")
                     }
+                    val surveyAnswers = buildMap {
+                        val ans = o.optJSONObject("surveyAnswers")
+                        if (ans != null) {
+                            val keys = ans.keys()
+                            while (keys.hasNext()) {
+                                val k = keys.next()
+                                put(k, ans.getBoolean(k))
+                            }
+                        }
+                    }
                     val cycleHr = buildList {
                         val hrArr = o.optJSONArray("cycleHr")
                         if (hrArr != null) {
@@ -265,6 +288,7 @@ class RehabSessionArchive(
                             weightSummary = o.optString("weightSummary", null)
                                 ?.takeIf { it.isNotBlank() && it != "null" },
                             surveyPassed = surveyPassed,
+                            surveyAnswers = surveyAnswers,
                             cycleHrSummaries = cycleHr,
                         ),
                     )
@@ -276,6 +300,9 @@ class RehabSessionArchive(
     companion object {
         private const val PREFS = "rehab_session_archive"
         private const val KEY = "sessions_v1"
+
+        private fun demoSurveyAnswers(): Map<String, Boolean> =
+            DefaultRehabSurvey.questions.associate { it.id to it.safeAnswerYes }
 
         private fun demoCycleHr(seed: Int): List<CycleHrSummary> = listOf(
             CycleHrSummary(1, 80, 90, if (seed % 3 == 0) CycleHrZoneOutcome.TOO_LOW else CycleHrZoneOutcome.OK, 84),

@@ -41,6 +41,8 @@ data class Disease(
     val id: String,
     val name: String,
     val icd: String = "",
+    /** ICD-10 lub ICD-9 — jak w DSD-mobile. */
+    val codingSystem: String = "ICD-10",
     val status: DiseaseStatus,
     val diagnosedLabel: String,
     val note: String = "",
