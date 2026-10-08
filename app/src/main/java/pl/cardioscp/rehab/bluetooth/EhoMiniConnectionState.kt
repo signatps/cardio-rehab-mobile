@@ -2,7 +2,7 @@ package pl.cardioscp.rehab.bluetooth
 
 /**
  * High-level connection lifecycle for the Plus EHO-Mini ECG recorder.
- * Concrete GATT / SPP framing will land after the firmware dump arrives.
+ * Connect path: Android-bonded Classic SPP device + Silvermedia framing.
  */
 sealed interface EhoMiniConnectionState {
     data object Idle : EhoMiniConnectionState

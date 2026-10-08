@@ -47,11 +47,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(connection = EhoMiniConnectionState.PermissionsRequired) }
             return
         }
-        // Discovery filter: PRO_PLUS_ECG_ + 6-digit serial (SPP transport pending).
+        // Pair in Android BT settings, then connect to bonded PRO_PLUS_ECG_****** via SPP.
         _uiState.update {
             it.copy(
                 connection = EhoMiniConnectionState.Error(
-                    "Transport SPP jeszcze niepodłączony — filtr BT: PRO_PLUS_ECG_******.",
+                    "Sparuj PRO_PLUS_ECG_****** w ustawieniach BT — socket SPP jeszcze niepodłączony w app.",
                 ),
             )
         }

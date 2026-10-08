@@ -9,7 +9,7 @@
 | [`diagrams/bpmn-session-flow.png`](diagrams/bpmn-session-flow.png) | BPMN: Init → równolegle ECG Offline + Pulse → End |
 | [`raw/*.scp`](raw/) | Przykładowe pliki SCP-ECG (ISO 11073-91064 / EN 1064) |
 
-Transport: **strumień bajtów Bluetooth** (Classic RFCOMM/SPP — BLE UUID nie są w dokumentacji). Model **Master–Slave**: aplikacja steruje, urządzenie nie inicjuje akcji biznesowych (poza błędami asynchronicznymi `0x03` i danymi po komendzie).
+Transport: **Bluetooth Classic SPP** (strumień bajtów RFCOMM). Parowanie w **menu Bluetooth Androida**; aplikacja łączy się z urządzeniem już sparowanym (bonded), filtrując po nazwie. Socket: well-known SPP UUID `00001101-0000-1000-8000-00805F9B34FB` — bez osobnego UUID od producenta. Model **Master–Slave**: aplikacja steruje, urządzenie nie inicjuje akcji biznesowych (poza błędami asynchronicznymi `0x03` i danymi po komendzie).
 
 Kod: `app/src/main/java/pl/cardioscp/rehab/bluetooth/protocol/`.
 
@@ -167,9 +167,15 @@ PRO_PLUS_ECG_<NNNNNN>
 
 Implementacja: `BluetoothDeviceFilter` (regex `^PRO_PLUS_ECG_\d{6}$`).
 
+Flow połączenia:
+
+1. Użytkownik paruje `PRO_PLUS_ECG_******` w ustawieniach Androida.
+2. Aplikacja czyta bonded devices i wybiera pasujące po nazwie.
+3. `createRfcommSocketToServiceRecord(SppConstants.SPP_UUID)` → framing Silvermedia.
+
 ## Otwarte / do potwierdzenia na EHO-Mini
 
-- [ ] UUID kanału RFCOMM/SPP
+- [x] Parowanie z poziomu systemu Android (bez custom UUID)
 - [x] `ScpInfo` = 4 bajty (uint32 LE) — do potwierdzenia empirycznie
 - [x] Nazwa reklamowa BT: `PRO_PLUS_ECG_` + 6 cyfr SN
 - [ ] Czy produkcyjny firmware wymaga ACK na `PulseValue` (przyjmujemy TAK wg ProPlus)
