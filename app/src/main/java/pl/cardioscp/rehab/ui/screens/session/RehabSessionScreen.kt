@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,7 +30,6 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.MonitorHeart
@@ -428,79 +428,100 @@ private fun IntroContent(
             Checkbox(checked = includeWeight, onCheckedChange = { includeWeight = it })
             Text("Niewydolność serca — mierz także wagę")
         }
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column(
-                Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    "Limity tętna",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = ProPlusColors.Navy,
-                )
-                Text(
-                    "Poniżej → PRZYSPIESZ, powyżej → ZWOLNIJ",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = ProPlusColors.Muted,
-                )
-                defaults.indices.forEach { idx ->
-                    HeartRateLimitStepper(
-                        cycle = idx + 1,
-                        minBpm = cycleMins[idx],
-                        maxBpm = cycleMaxs[idx],
-                        onMinChange = { v ->
-                            cycleMins = cycleMins.toMutableList().also { list ->
-                                list[idx] = v.coerceIn(40, (cycleMaxs[idx] - 1).coerceAtLeast(41))
-                            }
-                        },
-                        onMaxChange = { v ->
-                            cycleMaxs = cycleMaxs.toMutableList().also { list ->
-                                list[idx] = v.coerceIn((cycleMins[idx] + 1).coerceAtMost(219), 220)
-                            }
-                        },
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val narrow = maxWidth < 560.dp
+            val limitsBlock: @Composable (Modifier) -> Unit = { colMod ->
+                Column(
+                    colMod,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "Limity tętna",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = ProPlusColors.Navy,
                     )
+                    Text(
+                        "Poniżej → PRZYSPIESZ, powyżej → ZWOLNIJ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ProPlusColors.Muted,
+                    )
+                    defaults.indices.forEach { idx ->
+                        HeartRateLimitStepper(
+                            cycle = idx + 1,
+                            minBpm = cycleMins[idx],
+                            maxBpm = cycleMaxs[idx],
+                            stacked = narrow,
+                            onMinChange = { v ->
+                                cycleMins = cycleMins.toMutableList().also { list ->
+                                    list[idx] = v.coerceIn(40, (cycleMaxs[idx] - 1).coerceAtLeast(41))
+                                }
+                            },
+                            onMaxChange = { v ->
+                                cycleMaxs = cycleMaxs.toMutableList().also { list ->
+                                    list[idx] = v.coerceIn((cycleMins[idx] + 1).coerceAtMost(219), 220)
+                                }
+                            },
+                        )
+                    }
                 }
             }
-            Column(
-                Modifier.widthIn(min = 168.dp, max = 230.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                ElectrodeMannequin(
-                    status = electrodes,
-                    size = 132.dp,
-                    showLegend = true,
-                )
-                TextButton(onClick = onRefreshElectrodes) {
-                    Text("Odśwież elektrody")
-                }
-                Button(
-                    onClick = {
-                        val limits = defaults.indices.map { idx ->
-                            CycleHeartRateLimit(
-                                cycle = idx + 1,
-                                minBpm = cycleMins[idx],
-                                maxBpm = cycleMaxs[idx],
-                            )
-                        }
-                        onStart(includeWeight, limits, ecgMode)
-                    },
-                    enabled = canStart,
-                    modifier = Modifier.fillMaxWidth(),
+            val startBlock: @Composable (Modifier) -> Unit = { colMod ->
+                Column(
+                    colMod,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text("Rozpocznij sesję", style = MaterialTheme.typography.labelLarge)
-                }
-                if (!canStart) {
-                    Text(
-                        "Podłącz wszystkie elektrody (RA, LA, LF, RF, V1), aby startować.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ProPlusColors.ResultAlert,
-                        textAlign = TextAlign.Center,
+                    ElectrodeMannequin(
+                        status = electrodes,
+                        size = if (narrow) 120.dp else 132.dp,
+                        showLegend = true,
                     )
+                    TextButton(onClick = onRefreshElectrodes) {
+                        Text("Odśwież elektrody")
+                    }
+                    Button(
+                        onClick = {
+                            val limits = defaults.indices.map { idx ->
+                                CycleHeartRateLimit(
+                                    cycle = idx + 1,
+                                    minBpm = cycleMins[idx],
+                                    maxBpm = cycleMaxs[idx],
+                                )
+                            }
+                            onStart(includeWeight, limits, ecgMode)
+                        },
+                        enabled = canStart,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Rozpocznij sesję", style = MaterialTheme.typography.labelLarge)
+                    }
+                    if (!canStart) {
+                        Text(
+                            "Podłącz wszystkie elektrody (RA, LA, LF, RF, V1), aby startować.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ProPlusColors.ResultAlert,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+            if (narrow) {
+                // Telefon: najpierw ludzik + start, potem limity — bez ściskania stepperów.
+                Column(
+                    Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    startBlock(Modifier.fillMaxWidth())
+                    limitsBlock(Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    limitsBlock(Modifier.weight(1f))
+                    startBlock(Modifier.widthIn(min = 168.dp, max = 230.dp))
                 }
             }
         }
@@ -597,35 +618,66 @@ private fun HeartRateLimitStepper(
     cycle: Int,
     minBpm: Int,
     maxBpm: Int,
+    stacked: Boolean = false,
     onMinChange: (Int) -> Unit,
     onMaxChange: (Int) -> Unit,
 ) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(
-            "Cykl $cycle",
-            fontWeight = FontWeight.Bold,
-            color = ProPlusColors.Navy,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.width(64.dp),
-        )
-        CompactBpmStepper(
-            value = minBpm,
-            onChange = onMinChange,
-            contentDescription = "Min cykl $cycle",
-            boundLabel = "MIN",
-        )
-        CompactBpmStepper(
-            value = maxBpm,
-            onChange = onMaxChange,
-            contentDescription = "Max cykl $cycle",
-            boundLabel = "MAX",
-        )
+    if (stacked) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                "Cykl $cycle",
+                fontWeight = FontWeight.Bold,
+                color = ProPlusColors.Navy,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            CompactBpmStepper(
+                value = minBpm,
+                onChange = onMinChange,
+                contentDescription = "Min cykl $cycle",
+                boundLabel = "MIN",
+                modifier = Modifier.fillMaxWidth(),
+            )
+            CompactBpmStepper(
+                value = maxBpm,
+                onChange = onMaxChange,
+                contentDescription = "Max cykl $cycle",
+                boundLabel = "MAX",
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    } else {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                "Cykl $cycle",
+                fontWeight = FontWeight.Bold,
+                color = ProPlusColors.Navy,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.width(64.dp),
+            )
+            CompactBpmStepper(
+                value = minBpm,
+                onChange = onMinChange,
+                contentDescription = "Min cykl $cycle",
+                boundLabel = "MIN",
+            )
+            CompactBpmStepper(
+                value = maxBpm,
+                onChange = onMaxChange,
+                contentDescription = "Max cykl $cycle",
+                boundLabel = "MAX",
+            )
+        }
     }
 }
 
@@ -635,29 +687,23 @@ private fun CompactBpmStepper(
     onChange: (Int) -> Unit,
     contentDescription: String,
     boundLabel: String,
+    modifier: Modifier = Modifier,
 ) {
     Row(
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                Icons.Outlined.Favorite,
-                contentDescription = null,
-                tint = ProPlusColors.Accent,
-                modifier = Modifier.size(18.dp),
-            )
-            Text(
-                boundLabel,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = ProPlusColors.Accent,
-                lineHeight = 11.sp,
-            )
-        }
+        Text(
+            boundLabel,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = ProPlusColors.Accent,
+            modifier = Modifier.width(36.dp),
+        )
         IconButton(
             onClick = { onChange(value - 1) },
-            modifier = Modifier.size(32.dp),
+            modifier = Modifier.size(40.dp),
         ) {
             Icon(Icons.Outlined.Remove, contentDescription = "Zmniejsz $contentDescription")
         }
@@ -666,12 +712,13 @@ private fun CompactBpmStepper(
             fontWeight = FontWeight.Bold,
             color = ProPlusColors.Navy,
             textAlign = TextAlign.Center,
-            modifier = Modifier.width(36.dp),
+            modifier = Modifier.widthIn(min = 40.dp),
             style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
         )
         IconButton(
             onClick = { onChange(value + 1) },
-            modifier = Modifier.size(32.dp),
+            modifier = Modifier.size(40.dp),
         ) {
             Icon(Icons.Outlined.Add, contentDescription = "Zwiększ $contentDescription")
         }

@@ -2,12 +2,14 @@ package pl.cardioscp.rehab.ui.screens.clinic
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -49,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -195,48 +198,53 @@ fun DashboardScreen(
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Kafelki ~15% węższe — zajmują 85% szerokości rzędu.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val phoneCompact = maxWidth < 520.dp
             Row(
-                Modifier.weight(0.85f),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(if (phoneCompact) 6.dp else 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                CompactVitalTile(
-                    icon = Icons.Outlined.Bloodtype,
-                    value = bp?.valueText ?: "—",
-                    valueColor = bpColor,
-                    onMeasure = onMeasureBp,
-                    showMeasure = true,
-                    modifier = Modifier.weight(1f),
-                )
-                CompactVitalTile(
-                    icon = Icons.Outlined.MonitorWeight,
-                    value = weight?.valueText ?: "—",
-                    valueColor = ProPlusColors.Navy,
-                    onMeasure = onMeasureWeight,
-                    showMeasure = true,
-                    modifier = Modifier.weight(1f),
-                )
-                CompactVitalTile(
-                    icon = Icons.Outlined.FavoriteBorder,
-                    value = pulseText,
-                    valueColor = pulseColor,
-                    onMeasure = null,
-                    showMeasure = false,
-                    modifier = Modifier.weight(1f),
+                Row(
+                    Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(if (phoneCompact) 6.dp else 8.dp),
+                ) {
+                    CompactVitalTile(
+                        icon = Icons.Outlined.Bloodtype,
+                        value = bp?.valueText ?: "—",
+                        valueColor = bpColor,
+                        onMeasure = onMeasureBp,
+                        showMeasure = true,
+                        compact = phoneCompact,
+                        modifier = Modifier.weight(1f),
+                    )
+                    CompactVitalTile(
+                        icon = Icons.Outlined.MonitorWeight,
+                        value = weight?.valueText ?: "—",
+                        valueColor = ProPlusColors.Navy,
+                        onMeasure = onMeasureWeight,
+                        showMeasure = true,
+                        compact = phoneCompact,
+                        modifier = Modifier.weight(1f),
+                    )
+                    CompactVitalTile(
+                        icon = Icons.Outlined.FavoriteBorder,
+                        value = pulseText,
+                        valueColor = pulseColor,
+                        onMeasure = null,
+                        showMeasure = false,
+                        compact = phoneCompact,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                ElectrodeMannequin(
+                    status = electrodes,
+                    size = if (phoneCompact) 72.dp else 106.dp,
+                    showLegend = false,
+                    showStatusPictogram = true,
+                    modifier = Modifier.padding(start = 2.dp),
                 )
             }
-            ElectrodeMannequin(
-                status = electrodes,
-                size = 106.dp, // +20% względem 88 dp
-                showLegend = false,
-                showStatusPictogram = true,
-                modifier = Modifier.padding(start = 4.dp),
-            )
         }
 
         Text(
@@ -337,39 +345,87 @@ private fun CompactVitalTile(
     valueColor: Color,
     onMeasure: (() -> Unit)?,
     showMeasure: Boolean,
+    compact: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = ProPlusColors.Surface,
-        border = BorderStroke(1.dp, ProPlusColors.Line),
-    ) {
-        Row(
-            Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(icon, contentDescription = null, tint = ProPlusColors.Accent, modifier = Modifier.size(28.dp))
-            Text(
-                value,
-                style = MaterialTheme.typography.titleMedium,
-                color = valueColor,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-                maxLines = 2,
-            )
-            if (showMeasure && onMeasure != null) {
-                IconButton(onClick = onMeasure, modifier = Modifier.size(36.dp)) {
+    val shape = RoundedCornerShape(12.dp)
+    val border = BorderStroke(1.dp, ProPlusColors.Line)
+    val content: @Composable () -> Unit = {
+        if (compact) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = ProPlusColors.Accent,
+                    modifier = Modifier.size(22.dp),
+                )
+                Text(
+                    value,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = valueColor,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                )
+                if (showMeasure) {
                     Icon(
                         Icons.Filled.FiberManualRecord,
                         contentDescription = "REC — wykonaj pomiar",
                         tint = ProPlusColors.ResultAlert,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+            }
+        } else {
+            Row(
+                Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(icon, contentDescription = null, tint = ProPlusColors.Accent, modifier = Modifier.size(28.dp))
+                Text(
+                    value,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = valueColor,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (showMeasure) {
+                    Icon(
+                        Icons.Filled.FiberManualRecord,
+                        contentDescription = "REC — wykonaj pomiar",
+                        tint = ProPlusColors.ResultAlert,
+                        modifier = Modifier.size(16.dp),
                     )
                 }
             }
         }
+    }
+    val tileMod = modifier.heightIn(min = if (compact) 72.dp else 48.dp)
+    if (showMeasure && onMeasure != null) {
+        Surface(
+            onClick = onMeasure,
+            modifier = tileMod,
+            shape = shape,
+            color = ProPlusColors.Surface,
+            border = border,
+        ) { content() }
+    } else {
+        Surface(
+            modifier = tileMod,
+            shape = shape,
+            color = ProPlusColors.Surface,
+            border = border,
+        ) { content() }
     }
 }
 

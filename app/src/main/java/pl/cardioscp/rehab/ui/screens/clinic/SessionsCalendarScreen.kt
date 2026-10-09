@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -50,6 +52,7 @@ private val DayGreen = Color(0xFFD1E7DD)
 private val DayRed = Color(0xFFF8D7DA)
 private val DayScheduled = Color(0xFFDAF1FF)
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SessionsCalendarScreen(
     clinic: ClinicSnapshot,
@@ -158,9 +161,10 @@ fun SessionsCalendarScreen(
             }
         }
 
-        Row(
+        FlowRow(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             LegendDot(DayGreen, "Wykonana")
             LegendDot(DayRed, "Brak dopuszczenia / anulowana")
@@ -258,13 +262,22 @@ private fun statusLabel(status: PlannedSessionStatus): String = when (status) {
 
 @Composable
 private fun LegendDot(color: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
         Box(
             Modifier
                 .size(10.dp)
                 .clip(CircleShape)
                 .background(color),
         )
-        Text(label, style = MaterialTheme.typography.labelSmall, color = ProPlusColors.Muted)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = ProPlusColors.Muted,
+            maxLines = 2,
+            softWrap = true,
+        )
     }
 }

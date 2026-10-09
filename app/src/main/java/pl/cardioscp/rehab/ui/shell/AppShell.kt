@@ -174,7 +174,7 @@ private fun PhoneBar(
     NavigationBar(
         containerColor = ProPlusColors.Surface,
         tonalElevation = 0.dp,
-        modifier = Modifier.height(64.dp),
+        modifier = Modifier.height(56.dp),
     ) {
         phoneTabs.forEach { dest ->
             NavigationBarItem(
@@ -183,9 +183,11 @@ private fun PhoneBar(
                     (destination == AppDestination.DISEASES && dest == AppDestination.MEDS),
                 onClick = { onDestination(dest) },
                 icon = { Icon(dest.icon, contentDescription = dest.phoneLabel) },
+                // 6 pozycji — etykiety tylko przy aktywnej, żeby nie ściskać belki.
                 label = {
                     Text(dest.phoneLabel, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 },
+                alwaysShowLabel = false,
             )
         }
     }
