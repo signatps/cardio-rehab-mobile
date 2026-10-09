@@ -62,7 +62,9 @@ fun AnalogGauge(
         )
     }
 
-    val gaugeHeight = diameter * 0.62f
+    // Wyższy box — cyfry BPM w otwartej części łuku, nie na igle.
+    val gaugeHeight = diameter * 0.78f
+    val valueFontSp = (diameter.value * 0.20f).coerceIn(28f, 48f).sp
     val zMin = zoneMin
     val zMax = zoneMax
 
@@ -75,10 +77,9 @@ fun AnalogGauge(
                 .width(diameter)
                 .height(gaugeHeight)
                 .padding(horizontal = 4.dp),
-            contentAlignment = Alignment.Center,
         ) {
             Canvas(Modifier.matchParentSize()) {
-                val stroke = 11.dp.toPx()
+                val stroke = (diameter.toPx() * 0.055f).coerceIn(10f, 16f)
                 val arcW = size.width - stroke
                 val arcSize = Size(arcW, arcW)
                 val topLeft = Offset(stroke / 2f, size.height - arcSize.height / 2f - stroke / 2f)
@@ -171,16 +172,17 @@ fun AnalogGauge(
                 val cy = topLeft.y + arcSize.height / 2f
                 val angleDeg = 180f + 180f * fraction.value
                 val angleRad = Math.toRadians(angleDeg.toDouble())
-                val needleLen = arcSize.width / 2f - stroke
-                val tip = Offset(
+                val needleLen = (arcSize.width / 2f - stroke) * 0.78f
+                // Krótsza igła — zostawia miejsce na cyfry w środku łuku.
+                val shortTip = Offset(
                     cx + (cos(angleRad) * needleLen).toFloat(),
                     cy + (sin(angleRad) * needleLen).toFloat(),
                 )
                 drawLine(
                     color = ProPlusColors.Navy,
                     start = Offset(cx, cy),
-                    end = tip,
-                    strokeWidth = 3.dp.toPx(),
+                    end = shortTip,
+                    strokeWidth = (3.dp.toPx()).coerceAtLeast(stroke * 0.28f),
                     cap = StrokeCap.Round,
                 )
                 drawCircle(color = ProPlusColors.Navy, radius = 5.dp.toPx(), center = Offset(cx, cy))
@@ -197,17 +199,18 @@ fun AnalogGauge(
                     )
                 }
             }
+            // Cyfry w otwartej (górnej) części półkola — nie na piaście igły.
             Column(
                 Modifier
-                    .align(Alignment.BottomCenter)
-                    .offset(y = (-6).dp),
+                    .align(Alignment.Center)
+                    .offset(y = (-diameter * 0.10f)),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
                     text = value?.let { "${it.toInt()}" } ?: "—",
                     color = valueColor,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 36.sp,
+                    fontSize = valueFontSp,
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.displaySmall,
                 )
@@ -224,6 +227,7 @@ fun AnalogGauge(
             style = MaterialTheme.typography.labelMedium,
             color = ProPlusColors.Muted,
             textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 2.dp),
         )
     }
 }

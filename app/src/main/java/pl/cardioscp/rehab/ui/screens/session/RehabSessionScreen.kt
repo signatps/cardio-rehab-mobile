@@ -948,7 +948,7 @@ private fun TrainingPhaseContent(
                             valueColor = valueColor,
                             zoneMin = lim?.minBpm?.toFloat(),
                             zoneMax = lim?.maxBpm?.toFloat(),
-                            diameter = 128.dp,
+                            diameter = 196.dp,
                         )
                         if (cueText != null) {
                             FlashingCoachBanner(
