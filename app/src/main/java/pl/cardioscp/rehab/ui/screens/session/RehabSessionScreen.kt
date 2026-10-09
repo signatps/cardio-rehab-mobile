@@ -88,6 +88,8 @@ import pl.cardioscp.rehab.session.ExerciseKind
 import pl.cardioscp.rehab.session.HeartRateCoach
 import pl.cardioscp.rehab.session.HeartRateCoachCue
 import pl.cardioscp.rehab.session.HeartRateValueTone
+import pl.cardioscp.rehab.ecg.HeartRateStatsEngine
+import pl.cardioscp.rehab.ecg.Lead
 import pl.cardioscp.rehab.session.LiveEcgSnapshot
 import pl.cardioscp.rehab.session.RehabStep
 import pl.cardioscp.rehab.session.TrainingCoachVisual
@@ -1102,6 +1104,7 @@ private fun TrainingPhaseContent(
                         if (ecgMode == EcgAcquisitionMode.ONLINE) {
                             LiveEcgPreview(
                                 liveEcg = liveEcg,
+                                showHrFromEcg = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(200.dp),
@@ -1227,6 +1230,7 @@ private fun EcgHoldStillPanel(
             )
             LiveEcgPreview(
                 liveEcg = liveEcg,
+                showHrFromEcg = true,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp),
@@ -1261,7 +1265,15 @@ private fun EcgHoldStillPanel(
 private fun LiveEcgPreview(
     liveEcg: LiveEcgSnapshot?,
     modifier: Modifier = Modifier,
+    showHrFromEcg: Boolean = false,
 ) {
+    val bpm = remember(showHrFromEcg, liveEcg?.generation, liveEcg?.samplingHz) {
+        if (showHrFromEcg && liveEcg != null && liveEcg.hasTrace) {
+            liveHrFromSnapshot(liveEcg)
+        } else {
+            null
+        }
+    }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
@@ -1281,18 +1293,41 @@ private fun LiveEcgPreview(
                 }
             }
             liveEcg != null && liveEcg.hasTrace -> {
-                EcgPaper(
-                    leads = liveEcg.leads,
-                    samplingHz = liveEcg.samplingHz,
-                    mmPerSec = 25,
-                    mmPerMv = 10,
-                    rPeaks = intArrayOf(),
-                    showR = false,
-                    followLive = true,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(4.dp),
-                )
+                Box(Modifier.fillMaxSize()) {
+                    EcgPaper(
+                        leads = liveEcg.leads,
+                        samplingHz = liveEcg.samplingHz,
+                        mmPerSec = 25,
+                        mmPerMv = 10,
+                        rPeaks = intArrayOf(),
+                        showR = false,
+                        followLive = true,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp),
+                    )
+                    if (showHrFromEcg) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 6.dp, end = 10.dp),
+                            horizontalAlignment = Alignment.End,
+                        ) {
+                            Text(
+                                bpm?.toString() ?: "—",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = ProPlusColors.Navy,
+                            )
+                            Text(
+                                "BPM",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ProPlusColors.Muted,
+                            )
+                        }
+                    }
+                }
             }
             else -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1311,6 +1346,19 @@ private fun LiveEcgPreview(
             }
         }
     }
+}
+
+private fun liveHrFromSnapshot(snap: LiveEcgSnapshot): Int? {
+    val leads = linkedMapOf<Lead, DoubleArray>()
+    for ((label, samples) in snap.leads) {
+        val lead = when (label) {
+            "Vx", "V1" -> Lead.V1
+            else -> runCatching { Lead.fromLabel(label) }.getOrNull()
+        } ?: continue
+        leads[lead] = samples
+    }
+    if (leads.isEmpty()) return null
+    return HeartRateStatsEngine.liveFromLeads(leads, snap.samplingHz, windowSec = 8.0)
 }
 
 @Composable
