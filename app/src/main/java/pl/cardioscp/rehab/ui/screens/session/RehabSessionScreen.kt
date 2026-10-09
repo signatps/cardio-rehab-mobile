@@ -173,8 +173,16 @@ fun RehabSessionScreen(
                         size = 150.dp,
                     )
                     Text(
-                        "Zmierz ciśnienie ciśnieniomierzem BLE.",
-                        style = MaterialTheme.typography.bodyLarge,
+                        "Wykonaj pomiar ciśnienia",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = ProPlusColors.Navy,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        "Użyj ciśnieniomierza BLE.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ProPlusColors.Muted,
                         textAlign = TextAlign.Center,
                     )
                     state.vitals.bloodPressure?.let {
@@ -203,8 +211,16 @@ fun RehabSessionScreen(
                         size = 150.dp,
                     )
                     Text(
-                        "Niewydolność serca — zmierz masę ciała wagą BLE.",
-                        style = MaterialTheme.typography.bodyLarge,
+                        "Wykonaj pomiar masy ciała",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = ProPlusColors.Navy,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        "Niewydolność serca — użyj wagi BLE.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ProPlusColors.Muted,
                         textAlign = TextAlign.Center,
                     )
                     state.vitals.weight?.let {
@@ -634,7 +650,7 @@ private fun SurveyContent(
             )
             Column(Modifier.weight(1f)) {
                 Text(
-                    "Ankieta przed treningiem",
+                    "Uzupełnij ankietę o stanie zdrowia",
                     style = MaterialTheme.typography.titleSmall,
                     color = ProPlusColors.Navy,
                     fontWeight = FontWeight.SemiBold,
@@ -750,10 +766,11 @@ private fun TrainingPhaseContent(
             TrainingPhaseKind.ECG_REST_START -> TrainingCoachVisual.HOLD_STILL_ECG
         }
     val headline = when (visual) {
-        TrainingCoachVisual.EXERCISE -> "Ćwicz"
-        TrainingCoachVisual.STOP_BEFORE_PEAK_ECG -> "Przerwij ćwiczenie"
-        TrainingCoachVisual.HOLD_STILL_ECG -> "Pozostań nieruchomo — trwa zapis EKG"
-        TrainingCoachVisual.REST -> "Odpoczynek"
+        TrainingCoachVisual.EXERCISE ->
+            if (training.phaseElapsedSec < 3) "Rozpocznij ćwiczenie" else "Ćwicz"
+        TrainingCoachVisual.STOP_BEFORE_PEAK_ECG -> "Zatrzymaj się"
+        TrainingCoachVisual.HOLD_STILL_ECG -> "Trwa zapis EKG"
+        TrainingCoachVisual.REST -> "Odpocznij"
     }
     val pictogramRes = when (visual) {
         TrainingCoachVisual.EXERCISE -> when (exerciseKind) {
@@ -763,136 +780,49 @@ private fun TrainingPhaseContent(
         TrainingCoachVisual.HOLD_STILL_ECG -> R.drawable.coach_hold_still
         TrainingCoachVisual.REST -> R.drawable.coach_rest
     }
+    val timed = training.phase.kind == TrainingPhaseKind.EXERCISE ||
+        training.phase.kind == TrainingPhaseKind.REST ||
+        visual == TrainingCoachVisual.STOP_BEFORE_PEAK_ECG
+    val totalTimed = when (visual) {
+        TrainingCoachVisual.STOP_BEFORE_PEAK_ECG ->
+            (training.phaseElapsedSec + training.phaseRemainingSec).coerceAtLeast(1)
+        else -> training.phase.durationSec.coerceAtLeast(1)
+    }
     Column(
         Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            training.phase.label,
-            style = MaterialTheme.typography.labelLarge,
-            color = ProPlusColors.Muted,
-        )
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            CoachArt(
-                resId = pictogramRes,
-                contentDescription = headline,
-                size = 140.dp,
-                modifier = Modifier.weight(1f),
-            )
-            ElectrodeMannequin(
-                status = electrodes,
-                size = 140.dp,
-                showLegend = true,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        if (visual == TrainingCoachVisual.EXERCISE) {
             Text(
-                exerciseKind.displayNamePl,
-                style = MaterialTheme.typography.titleMedium,
-                color = ProPlusColors.Accent,
-                fontWeight = FontWeight.SemiBold,
+                training.phase.label,
+                style = MaterialTheme.typography.labelLarge,
+                color = ProPlusColors.Muted,
+                modifier = Modifier.weight(1f),
             )
-        }
-        Text(
-            headline,
-            style = MaterialTheme.typography.headlineSmall,
-            color = when (visual) {
-                TrainingCoachVisual.STOP_BEFORE_PEAK_ECG -> ProPlusColors.ResultAlert
-                TrainingCoachVisual.HOLD_STILL_ECG -> ProPlusColors.Navy
-                TrainingCoachVisual.REST -> ProPlusColors.Accent
-                TrainingCoachVisual.EXERCISE -> ProPlusColors.Navy
-            },
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-        )
-        when {
-            visual == TrainingCoachVisual.EXERCISE && training.measuringPulse -> {
-                val lim = training.heartRateLimit
-                val tone = HeartRateCoach.valueTone(training.pulseBpm, lim)
-                val valueColor = when (tone) {
-                    HeartRateValueTone.IN_ZONE -> ProPlusColors.ResultGood
-                    HeartRateValueTone.NEAR_EDGE -> ProPlusColors.ResultWatch
-                    HeartRateValueTone.OUT_OF_ZONE -> ProPlusColors.ResultAlert
-                    HeartRateValueTone.WAITING -> ProPlusColors.Muted
-                }
-                val cueText = HeartRateCoach.screenText(training.heartRateCue)
-                if (cueText != null) {
-                    LaunchedEffect(training.heartRateCue, training.phase.index) {
-                        while (true) {
-                            HeartRateCoach.speakText(training.heartRateCue)?.let(onSpeakCue)
-                            delay(4_000)
-                        }
-                    }
-                }
-                lim?.let {
-                    Text(
-                        "Cel cyklu ${it.cycle}: ${it.minBpm}–${it.maxBpm} bpm",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = ProPlusColors.Navy,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-                AnalogGauge(
-                    value = training.pulseBpm?.takeIf { it > 0 }?.toFloat(),
-                    minValue = 40f,
-                    maxValue = 180f,
-                    label = if (training.pulseBpm != null && training.pulseBpm > 0) {
-                        "Tętno z EKG"
-                    } else {
-                        "Oczekiwanie na tętno…"
-                    },
-                    unit = "bpm",
-                    valueColor = valueColor,
-                    zoneMin = lim?.minBpm?.toFloat(),
-                    zoneMax = lim?.maxBpm?.toFloat(),
-                    diameter = 160.dp,
+            OutlinedButton(
+                onClick = onComment,
+                modifier = Modifier.height(34.dp),
+                contentPadding = ButtonDefaults.ContentPadding,
+            ) {
+                Icon(
+                    Icons.Outlined.ChatBubbleOutline,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
                 )
-                if (cueText != null) {
-                    FlashingCoachBanner(
-                        text = cueText,
-                        accent = when (training.heartRateCue) {
-                            HeartRateCoachCue.SPEED_UP -> CoachBannerColors.speedUp
-                            else -> CoachBannerColors.slowDown
-                        },
-                        modifier = Modifier.widthIn(max = 320.dp),
-                    )
-                }
-            }
-            visual == TrainingCoachVisual.REST && training.measuringPulse -> {
-                Text(
-                    training.pulseBpm?.takeIf { it > 0 }?.toString() ?: "—",
-                    style = MaterialTheme.typography.displayMedium,
-                    color = ProPlusColors.Navy,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text("bpm", style = MaterialTheme.typography.titleMedium, color = ProPlusColors.Muted)
-            }
-            visual == TrainingCoachVisual.HOLD_STILL_ECG -> {
-                LinearProgressIndicator(
-                    progress = { 0f },
-                    modifier = Modifier.fillMaxWidth(0.7f),
-                )
+                Spacer(Modifier.width(4.dp))
+                Text("Komentarz", style = MaterialTheme.typography.labelMedium)
             }
         }
-        val timed = training.phase.kind == TrainingPhaseKind.EXERCISE ||
-            training.phase.kind == TrainingPhaseKind.REST ||
-            visual == TrainingCoachVisual.STOP_BEFORE_PEAK_ECG
         if (timed) {
-            val total = when (visual) {
-                TrainingCoachVisual.STOP_BEFORE_PEAK_ECG ->
-                    (training.phaseElapsedSec + training.phaseRemainingSec).coerceAtLeast(1)
-                else -> training.phase.durationSec.coerceAtLeast(1)
-            }
             LinearProgressIndicator(
-                progress = { training.phaseElapsedSec.toFloat() / total },
+                progress = { training.phaseElapsedSec.toFloat() / totalTimed },
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(
@@ -900,18 +830,127 @@ private fun TrainingPhaseContent(
                     training.phaseRemainingSec / 60,
                     training.phaseRemainingSec % 60,
                 ),
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
         }
-        Spacer(Modifier.height(4.dp))
-        OutlinedButton(
-            onClick = onComment,
-            modifier = Modifier.widthIn(min = 200.dp, max = 280.dp),
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("Komentarz pacjenta")
+            Column(
+                Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                CoachArt(
+                    resId = pictogramRes,
+                    contentDescription = headline,
+                    size = 110.dp,
+                )
+                if (visual == TrainingCoachVisual.EXERCISE) {
+                    Text(
+                        exerciseKind.displayNamePl,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = ProPlusColors.Accent,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Text(
+                    headline,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = when (visual) {
+                        TrainingCoachVisual.STOP_BEFORE_PEAK_ECG -> ProPlusColors.ResultAlert
+                        TrainingCoachVisual.HOLD_STILL_ECG -> ProPlusColors.Navy
+                        TrainingCoachVisual.REST -> ProPlusColors.Accent
+                        TrainingCoachVisual.EXERCISE -> ProPlusColors.Navy
+                    },
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            Column(
+                Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                ElectrodeMannequin(
+                    status = electrodes,
+                    size = 96.dp,
+                    showLegend = false,
+                    showStatusPictogram = true,
+                )
+                when {
+                    visual == TrainingCoachVisual.EXERCISE && training.measuringPulse -> {
+                        val lim = training.heartRateLimit
+                        val tone = HeartRateCoach.valueTone(training.pulseBpm, lim)
+                        val valueColor = when (tone) {
+                            HeartRateValueTone.IN_ZONE -> ProPlusColors.ResultGood
+                            HeartRateValueTone.NEAR_EDGE -> ProPlusColors.ResultWatch
+                            HeartRateValueTone.OUT_OF_ZONE -> ProPlusColors.ResultAlert
+                            HeartRateValueTone.WAITING -> ProPlusColors.Muted
+                        }
+                        val cueText = HeartRateCoach.screenText(training.heartRateCue)
+                        if (cueText != null) {
+                            LaunchedEffect(training.heartRateCue, training.phase.index) {
+                                while (true) {
+                                    HeartRateCoach.speakText(training.heartRateCue)?.let(onSpeakCue)
+                                    delay(4_000)
+                                }
+                            }
+                        }
+                        lim?.let {
+                            Text(
+                                "Cel cyklu ${it.cycle}: ${it.minBpm}–${it.maxBpm} bpm",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = ProPlusColors.Navy,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        AnalogGauge(
+                            value = training.pulseBpm?.takeIf { it > 0 }?.toFloat(),
+                            minValue = 40f,
+                            maxValue = 180f,
+                            label = if (training.pulseBpm != null && training.pulseBpm > 0) {
+                                "Tętno z EKG"
+                            } else {
+                                "Oczekiwanie…"
+                            },
+                            unit = "bpm",
+                            valueColor = valueColor,
+                            zoneMin = lim?.minBpm?.toFloat(),
+                            zoneMax = lim?.maxBpm?.toFloat(),
+                            diameter = 128.dp,
+                        )
+                        if (cueText != null) {
+                            FlashingCoachBanner(
+                                text = cueText,
+                                accent = when (training.heartRateCue) {
+                                    HeartRateCoachCue.SPEED_UP -> CoachBannerColors.speedUp
+                                    else -> CoachBannerColors.slowDown
+                                },
+                                modifier = Modifier.widthIn(max = 280.dp),
+                            )
+                        }
+                    }
+                    visual == TrainingCoachVisual.REST && training.measuringPulse -> {
+                        Text(
+                            training.pulseBpm?.takeIf { it > 0 }?.toString() ?: "—",
+                            style = MaterialTheme.typography.displaySmall,
+                            color = ProPlusColors.Navy,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text("bpm", style = MaterialTheme.typography.titleSmall, color = ProPlusColors.Muted)
+                    }
+                    visual == TrainingCoachVisual.HOLD_STILL_ECG -> {
+                        LinearProgressIndicator(
+                            progress = { 0f },
+                            modifier = Modifier.fillMaxWidth(0.85f),
+                        )
+                    }
+                }
+            }
         }
         if (training.pausedForEvent) {
             if (training.phase.kind == TrainingPhaseKind.EXERCISE) {
@@ -957,7 +996,7 @@ private fun EcgHoldStillPanel(
     val headline = if (checking) {
         "Sprawdzanie elektrod — nie ruszaj się"
     } else {
-        "Pozostań nieruchomo — trwa zapis EKG"
+        "Trwa zapis EKG"
     }
     Column(
         Modifier.fillMaxWidth(),
@@ -1030,7 +1069,7 @@ private fun SummaryContent(
                 size = 120.dp,
             )
             Text(
-                "Podsumowanie sesji",
+                "Sesja rehabilitacji zakończona",
                 style = MaterialTheme.typography.titleMedium,
                 color = ProPlusColors.Navy,
                 fontWeight = FontWeight.SemiBold,
