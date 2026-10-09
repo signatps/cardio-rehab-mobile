@@ -27,7 +27,7 @@ import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.MonitorHeart
 import androidx.compose.material.icons.outlined.MonitorWeight
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -351,9 +351,10 @@ private fun CompactVitalTile(
             if (showMeasure && onMeasure != null) {
                 IconButton(onClick = onMeasure, modifier = Modifier.size(36.dp)) {
                     Icon(
-                        Icons.Outlined.PlayArrow,
-                        contentDescription = "Pomiar",
-                        tint = ProPlusColors.Accent,
+                        Icons.Filled.FiberManualRecord,
+                        contentDescription = "REC — wykonaj pomiar",
+                        tint = ProPlusColors.ResultAlert,
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
