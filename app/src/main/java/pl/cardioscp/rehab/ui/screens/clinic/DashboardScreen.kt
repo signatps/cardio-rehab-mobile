@@ -187,48 +187,46 @@ fun DashboardScreen(
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            CompactVitalTile(
-                icon = Icons.Outlined.Bloodtype,
-                value = bp?.valueText ?: "—",
-                valueColor = bpColor,
-                onMeasure = onMeasureBp,
-                showMeasure = true,
-                modifier = Modifier.weight(1f),
-            )
-            CompactVitalTile(
-                icon = Icons.Outlined.MonitorWeight,
-                value = weight?.valueText ?: "—",
-                valueColor = ProPlusColors.Navy,
-                onMeasure = onMeasureWeight,
-                showMeasure = true,
-                modifier = Modifier.weight(1f),
-            )
-            CompactVitalTile(
-                icon = Icons.Outlined.FavoriteBorder,
-                value = pulseText,
-                valueColor = pulseColor,
-                onMeasure = null,
-                showMeasure = false,
-                modifier = Modifier.weight(1f),
-            )
+            // Kafelki ~15% węższe — zajmują 85% szerokości rzędu.
+            Row(
+                Modifier.weight(0.85f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CompactVitalTile(
+                    icon = Icons.Outlined.Bloodtype,
+                    value = bp?.valueText ?: "—",
+                    valueColor = bpColor,
+                    onMeasure = onMeasureBp,
+                    showMeasure = true,
+                    modifier = Modifier.weight(1f),
+                )
+                CompactVitalTile(
+                    icon = Icons.Outlined.MonitorWeight,
+                    value = weight?.valueText ?: "—",
+                    valueColor = ProPlusColors.Navy,
+                    onMeasure = onMeasureWeight,
+                    showMeasure = true,
+                    modifier = Modifier.weight(1f),
+                )
+                CompactVitalTile(
+                    icon = Icons.Outlined.FavoriteBorder,
+                    value = pulseText,
+                    valueColor = pulseColor,
+                    onMeasure = null,
+                    showMeasure = false,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             ElectrodeMannequin(
                 status = electrodes,
-                size = 88.dp,
+                size = 106.dp, // +20% względem 88 dp
                 showLegend = false,
+                showStatusPictogram = true,
                 modifier = Modifier.padding(start = 4.dp),
             )
         }
-
-        Text(
-            electrodes.summaryPl,
-            style = MaterialTheme.typography.labelMedium,
-            color = when {
-                electrodes.allAttached -> ProPlusColors.ResultGood
-                electrodes.detachedSites.isNotEmpty() -> ProPlusColors.ResultAlert
-                else -> ProPlusColors.Muted
-            },
-        )
 
         Text(
             "Plan na dziś · ${clinic.planDate.format(java.time.format.DateTimeFormatter.ofPattern("d.MM.yyyy"))}",

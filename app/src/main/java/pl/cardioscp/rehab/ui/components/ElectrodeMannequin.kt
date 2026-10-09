@@ -14,6 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.HelpOutline
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -58,6 +63,8 @@ fun ElectrodeMannequin(
     modifier: Modifier = Modifier,
     size: Dp = 160.dp,
     showLegend: Boolean = true,
+    /** Compact OK / fault / unknown icon under the figure (dashboard). */
+    showStatusPictogram: Boolean = false,
 ) {
     Column(
         modifier = modifier,
@@ -90,6 +97,9 @@ fun ElectrodeMannequin(
                 )
             }
         }
+        if (showStatusPictogram) {
+            ElectrodeStatusPictogram(status = status)
+        }
         if (showLegend) {
             Text(
                 status.summaryPl,
@@ -109,6 +119,37 @@ fun ElectrodeMannequin(
             }
         }
     }
+}
+
+@Composable
+fun ElectrodeStatusPictogram(
+    status: ElectrodeStatus,
+    modifier: Modifier = Modifier,
+    iconSize: Dp = 28.dp,
+) {
+    val (icon, tint, label) = when {
+        status.allAttached -> Triple(
+            Icons.Outlined.CheckCircle,
+            ProPlusColors.ResultGood,
+            "Elektrody OK",
+        )
+        status.anyDetachedLike() -> Triple(
+            Icons.Outlined.Cancel,
+            ProPlusColors.ResultAlert,
+            "Elektrody odpięte",
+        )
+        else -> Triple(
+            Icons.Outlined.HelpOutline,
+            ProPlusColors.Muted,
+            "Status elektrod nieznany",
+        )
+    }
+    Icon(
+        imageVector = icon,
+        contentDescription = label,
+        tint = tint,
+        modifier = modifier.size(iconSize),
+    )
 }
 
 private fun ElectrodeStatus.anyDetachedLike(): Boolean =

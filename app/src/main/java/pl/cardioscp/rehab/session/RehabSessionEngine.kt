@@ -85,7 +85,7 @@ class RehabSessionEngine(
             return
         }
         scope.launch {
-            // 1) 2 s: sprawdzenie elektrod + ludzik STOP (zakaz ruchu)
+            // 1) STOP + Get(electrodes) do urządzenia, potem dopełnij do min. 2 s
             update {
                 it.copy(
                     step = RehabStep.ECG_BASELINE,
@@ -95,11 +95,23 @@ class RehabSessionEngine(
                     statusMessage = "Sprawdzanie elektrod — pozostań nieruchomo",
                 )
             }
-            val electrodes = runCatching { sessionController.refreshElectrodes() }
-                .getOrDefault(sessionController.electrodeStatus.value)
-            delay(2_000)
-            val afterCheck = sessionController.electrodeStatus.value.let { current ->
-                if (current.known) current else electrodes
+            val checkStartedAt = System.currentTimeMillis()
+            val afterCheck = runCatching {
+                sessionController.refreshElectrodes(timeoutMs = 3_500L)
+            }.getOrDefault(sessionController.electrodeStatus.value)
+            val elapsed = System.currentTimeMillis() - checkStartedAt
+            delay((2_000L - elapsed).coerceAtLeast(0L))
+            if (!afterCheck.known) {
+                update {
+                    it.copy(
+                        step = RehabStep.INTRO,
+                        baselineEcgPhase = null,
+                        busy = false,
+                        error = "Brak odpowiedzi urządzenia na sprawdzenie elektrod (Get 0x02).",
+                        statusMessage = null,
+                    )
+                }
+                return@launch
             }
             if (!afterCheck.allAttached) {
                 update {
