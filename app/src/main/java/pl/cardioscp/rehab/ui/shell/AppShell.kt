@@ -26,11 +26,13 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import pl.cardioscp.rehab.auth.AppRole
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import pl.cardioscp.rehab.ui.theme.isTabletSw
 
@@ -38,7 +40,11 @@ import pl.cardioscp.rehab.ui.theme.isTabletSw
 fun AppShell(
     destination: AppDestination,
     onDestination: (AppDestination) -> Unit,
-    patientName: String,
+    visibleDestinations: List<AppDestination>,
+    phoneTabs: List<AppDestination>,
+    headerName: String,
+    roleLabel: String,
+    onLogout: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     BoxWithConstraints(
@@ -59,10 +65,12 @@ fun AppShell(
                     SideRail(
                         destination = destination,
                         onDestination = onDestination,
-                        patientName = patientName,
+                        visibleDestinations = visibleDestinations,
+                        headerName = headerName,
+                        roleLabel = roleLabel,
+                        onLogout = onLogout,
                     )
                 }
-                // Prawa ramka treści (jak mobile-DSD)
                 Surface(
                     modifier = Modifier
                         .weight(1f)
@@ -89,7 +97,30 @@ fun AppShell(
                 }
             }
             if (!tablet) {
-                PhoneBar(destination = destination, onDestination = onDestination)
+                Column(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "$headerName · $roleLabel",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ProPlusColors.Muted,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                        )
+                        TextButton(onClick = onLogout) {
+                            Text("Wyloguj", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    PhoneBar(
+                        destination = destination,
+                        onDestination = onDestination,
+                        phoneTabs = phoneTabs,
+                    )
+                }
             }
         }
     }
@@ -99,7 +130,10 @@ fun AppShell(
 private fun SideRail(
     destination: AppDestination,
     onDestination: (AppDestination) -> Unit,
-    patientName: String,
+    visibleDestinations: List<AppDestination>,
+    headerName: String,
+    roleLabel: String,
+    onLogout: () -> Unit,
 ) {
     NavigationRail(
         modifier = Modifier
@@ -127,11 +161,21 @@ private fun SideRail(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    patientName,
+                    headerName,
                     style = MaterialTheme.typography.labelSmall,
                     color = ProPlusColors.Muted,
                     maxLines = 2,
                 )
+                Text(
+                    roleLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ProPlusColors.Accent,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+                TextButton(onClick = onLogout) {
+                    Text("Wyloguj", style = MaterialTheme.typography.labelSmall)
+                }
             }
         },
     ) {
@@ -140,7 +184,7 @@ private fun SideRail(
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            AppDestination.entries.forEach { dest ->
+            visibleDestinations.forEach { dest ->
                 NavigationRailItem(
                     selected = destination == dest,
                     onClick = { onDestination(dest) },
@@ -161,16 +205,8 @@ private fun SideRail(
 private fun PhoneBar(
     destination: AppDestination,
     onDestination: (AppDestination) -> Unit,
+    phoneTabs: List<AppDestination>,
 ) {
-    // Na telefonie skrócona belka — najważniejsze zakładki
-    val phoneTabs = listOf(
-        AppDestination.DASHBOARD,
-        AppDestination.SESSIONS,
-        AppDestination.MEASUREMENTS,
-        AppDestination.MEDS,
-        AppDestination.REHAB,
-        AppDestination.DEVICE,
-    )
     NavigationBar(
         containerColor = ProPlusColors.Surface,
         tonalElevation = 0.dp,
@@ -183,7 +219,6 @@ private fun PhoneBar(
                     (destination == AppDestination.DISEASES && dest == AppDestination.MEDS),
                 onClick = { onDestination(dest) },
                 icon = { Icon(dest.icon, contentDescription = dest.phoneLabel) },
-                // 6 pozycji — etykiety tylko przy aktywnej, żeby nie ściskać belki.
                 label = {
                     Text(dest.phoneLabel, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                 },
@@ -191,4 +226,10 @@ private fun PhoneBar(
             )
         }
     }
+}
+
+fun AppRole.shellRoleLabel(): String = when (this) {
+    AppRole.PATIENT -> "Pacjent"
+    AppRole.DOCTOR -> "Lekarz"
+    AppRole.ADMIN -> "Admin"
 }

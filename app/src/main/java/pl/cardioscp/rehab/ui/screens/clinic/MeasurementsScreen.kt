@@ -18,10 +18,12 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.MonitorHeart
 import androidx.compose.material.icons.outlined.MonitorWeight
 import androidx.compose.material.icons.outlined.Timeline
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,6 +43,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+enum class MeasurementsMode {
+    /** Admin — pełna historia i filtry. */
+    FULL,
+    /** Pacjent — ciśnienie/waga + przegląd wyników. */
+    PATIENT,
+    /** Lekarz — tylko wyniki z sesji rehab. */
+    DOCTOR_REHAB_ONLY,
+}
+
 private sealed class MeasureFilter {
     data object All : MeasureFilter()
     data object RehabSessions : MeasureFilter()
@@ -55,12 +66,36 @@ private data class SessionBucket(
 )
 
 @Composable
-fun MeasurementsScreen(clinic: ClinicSnapshot) {
-    var filter by remember { mutableStateOf<MeasureFilter>(MeasureFilter.All) }
+fun MeasurementsScreen(
+    clinic: ClinicSnapshot,
+    mode: MeasurementsMode = MeasurementsMode.FULL,
+    onMeasureBp: () -> Unit = {},
+    onMeasureWeight: () -> Unit = {},
+) {
+    val patientKinds = setOf(VitalKind.BLOOD_PRESSURE, VitalKind.WEIGHT)
+    val baseMeasurements = remember(clinic.measurements, mode) {
+        when (mode) {
+            MeasurementsMode.FULL -> clinic.measurements
+            MeasurementsMode.PATIENT -> clinic.measurements.filter {
+                it.kind in patientKinds || it.sessionGroupId != null
+            }
+            MeasurementsMode.DOCTOR_REHAB_ONLY -> clinic.measurements.filter {
+                it.sessionGroupId != null
+            }
+        }
+    }
+    var filter by remember(mode) {
+        mutableStateOf(
+            when (mode) {
+                MeasurementsMode.DOCTOR_REHAB_ONLY -> MeasureFilter.RehabSessions
+                else -> MeasureFilter.All
+            },
+        )
+    }
     val timeFmt = remember { SimpleDateFormat("d.MM.yyyy HH:mm", Locale("pl")) }
 
-    val sessionBuckets = remember(clinic.measurements) {
-        clinic.measurements
+    val sessionBuckets = remember(baseMeasurements) {
+        baseMeasurements
             .filter { it.sessionGroupId != null }
             .groupBy { it.sessionGroupId!! }
             .map { (id, items) ->
@@ -73,37 +108,80 @@ fun MeasurementsScreen(clinic: ClinicSnapshot) {
             }
             .sortedByDescending { it.measuredAtMs }
     }
-    val standalone = remember(clinic.measurements) {
-        clinic.measurements.filter { it.sessionGroupId == null }
+    val standalone = remember(baseMeasurements, mode) {
+        val rows = baseMeasurements.filter { it.sessionGroupId == null }
+        when (mode) {
+            MeasurementsMode.PATIENT -> rows.filter { it.kind in patientKinds }
+            MeasurementsMode.DOCTOR_REHAB_ONLY -> emptyList()
+            MeasurementsMode.FULL -> rows
+        }
+    }
+    val kindChips = when (mode) {
+        MeasurementsMode.FULL -> VitalKind.entries.toList()
+        MeasurementsMode.PATIENT -> listOf(VitalKind.BLOOD_PRESSURE, VitalKind.WEIGHT)
+        MeasurementsMode.DOCTOR_REHAB_ONLY -> emptyList()
     }
 
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Pomiary", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(
-                selected = filter is MeasureFilter.All,
-                onClick = { filter = MeasureFilter.All },
-                label = { Text("Wszystkie") },
+        Text(
+            when (mode) {
+                MeasurementsMode.DOCTOR_REHAB_ONLY -> "Wyniki sesji rehab"
+                else -> "Pomiary"
+            },
+            style = MaterialTheme.typography.headlineMedium,
+            color = ProPlusColors.Navy,
+        )
+        if (mode == MeasurementsMode.PATIENT) {
+            Text(
+                "Wykonaj pomiar ciśnienia lub wagi albo przejrzyj wyniki.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = ProPlusColors.Muted,
             )
-            FilterChip(
-                selected = filter is MeasureFilter.RehabSessions,
-                onClick = { filter = MeasureFilter.RehabSessions },
-                label = { Text("Sesje rehab") },
-            )
-            VitalKind.entries.forEach { k ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = onMeasureBp,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Ciśnienie")
+                }
+                OutlinedButton(
+                    onClick = onMeasureWeight,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Waga")
+                }
+            }
+        }
+        if (mode != MeasurementsMode.DOCTOR_REHAB_ONLY) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 FilterChip(
-                    selected = filter == MeasureFilter.Kind(k),
-                    onClick = { filter = MeasureFilter.Kind(k) },
-                    label = { Text(k.shortLabel()) },
-                    leadingIcon = {
-                        Icon(k.pictogram(), contentDescription = null, modifier = Modifier.size(18.dp))
-                    },
+                    selected = filter is MeasureFilter.All,
+                    onClick = { filter = MeasureFilter.All },
+                    label = { Text("Wszystkie") },
                 )
+                FilterChip(
+                    selected = filter is MeasureFilter.RehabSessions,
+                    onClick = { filter = MeasureFilter.RehabSessions },
+                    label = { Text("Sesje rehab") },
+                )
+                kindChips.forEach { k ->
+                    FilterChip(
+                        selected = filter == MeasureFilter.Kind(k),
+                        onClick = { filter = MeasureFilter.Kind(k) },
+                        label = { Text(k.shortLabel()) },
+                        leadingIcon = {
+                            Icon(k.pictogram(), contentDescription = null, modifier = Modifier.size(18.dp))
+                        },
+                    )
+                }
             }
         }
 
@@ -175,7 +253,7 @@ fun MeasurementsScreen(clinic: ClinicSnapshot) {
                 }
             }
             is MeasureFilter.Kind -> {
-                val rows = clinic.measurements.filter { it.kind == f.kind }
+                val rows = baseMeasurements.filter { it.kind == f.kind }
                 if (rows.isEmpty()) {
                     Text("Brak pomiarów w tym filtrze.", color = ProPlusColors.Muted)
                 } else {

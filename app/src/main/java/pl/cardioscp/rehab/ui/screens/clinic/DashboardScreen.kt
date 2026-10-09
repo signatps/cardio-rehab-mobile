@@ -80,6 +80,8 @@ fun DashboardScreen(
     alertCount: Int = 0,
     electrodes: ElectrodeStatus = ElectrodeStatus.unknown(),
     connection: EhoMiniConnectionState = EhoMiniConnectionState.Idle,
+    /** Pacjent: tylko leki + sesja rehab (bez kafelków dodatkowych pomiarów). */
+    patientHomeMode: Boolean = false,
     onOpenRehab: () -> Unit,
     onOpenDayPlan: () -> Unit,
     onOpenMeds: () -> Unit,
@@ -103,7 +105,11 @@ fun DashboardScreen(
     val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
     val bpColor = whoColorForBpText(bp?.valueText)
     val pulseColor = whoColorForPulse(livePulseBpm)
-    val measureItems = clinic.dayPlan.filter { it.kind != DayPlanKind.SESSION }
+    val measureItems = if (patientHomeMode) {
+        clinic.dayPlan.filter { it.kind == DayPlanKind.MED }
+    } else {
+        clinic.dayPlan.filter { it.kind != DayPlanKind.SESSION }
+    }
     val sessionItems = clinic.dayPlan.filter { it.kind == DayPlanKind.SESSION }
 
     Column(
@@ -192,59 +198,63 @@ fun DashboardScreen(
                         )
                     }
                 }
-                DeviceConnectionStatusButton(
-                    connection = connection,
-                    onReconnect = onReconnectDevice,
-                )
+                if (!patientHomeMode) {
+                    DeviceConnectionStatusButton(
+                        connection = connection,
+                        onReconnect = onReconnectDevice,
+                    )
+                }
             }
         }
 
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val phoneCompact = maxWidth < 520.dp
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(if (phoneCompact) 6.dp else 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+        if (!patientHomeMode) {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val phoneCompact = maxWidth < 520.dp
                 Row(
-                    Modifier.weight(1f),
+                    Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(if (phoneCompact) 6.dp else 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    CompactVitalTile(
-                        icon = Icons.Outlined.Bloodtype,
-                        value = bp?.valueText ?: "—",
-                        valueColor = bpColor,
-                        onMeasure = onMeasureBp,
-                        showMeasure = true,
-                        compact = phoneCompact,
-                        modifier = Modifier.weight(1f),
-                    )
-                    CompactVitalTile(
-                        icon = Icons.Outlined.MonitorWeight,
-                        value = weight?.valueText ?: "—",
-                        valueColor = ProPlusColors.Navy,
-                        onMeasure = onMeasureWeight,
-                        showMeasure = true,
-                        compact = phoneCompact,
-                        modifier = Modifier.weight(1f),
-                    )
-                    CompactVitalTile(
-                        icon = Icons.Outlined.FavoriteBorder,
-                        value = pulseText,
-                        valueColor = pulseColor,
-                        onMeasure = null,
-                        showMeasure = false,
-                        compact = phoneCompact,
-                        modifier = Modifier.weight(1f),
+                    Row(
+                        Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(if (phoneCompact) 6.dp else 8.dp),
+                    ) {
+                        CompactVitalTile(
+                            icon = Icons.Outlined.Bloodtype,
+                            value = bp?.valueText ?: "—",
+                            valueColor = bpColor,
+                            onMeasure = onMeasureBp,
+                            showMeasure = true,
+                            compact = phoneCompact,
+                            modifier = Modifier.weight(1f),
+                        )
+                        CompactVitalTile(
+                            icon = Icons.Outlined.MonitorWeight,
+                            value = weight?.valueText ?: "—",
+                            valueColor = ProPlusColors.Navy,
+                            onMeasure = onMeasureWeight,
+                            showMeasure = true,
+                            compact = phoneCompact,
+                            modifier = Modifier.weight(1f),
+                        )
+                        CompactVitalTile(
+                            icon = Icons.Outlined.FavoriteBorder,
+                            value = pulseText,
+                            valueColor = pulseColor,
+                            onMeasure = null,
+                            showMeasure = false,
+                            compact = phoneCompact,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    ElectrodeMannequin(
+                        status = electrodes,
+                        size = if (phoneCompact) 72.dp else 106.dp,
+                        showLegend = false,
+                        showStatusPictogram = true,
+                        modifier = Modifier.padding(start = 2.dp),
                     )
                 }
-                ElectrodeMannequin(
-                    status = electrodes,
-                    size = if (phoneCompact) 72.dp else 106.dp,
-                    showLegend = false,
-                    showStatusPictogram = true,
-                    modifier = Modifier.padding(start = 2.dp),
-                )
             }
         }
 
@@ -264,7 +274,7 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    "Pomiary / leki",
+                    if (patientHomeMode) "Leki" else "Pomiary / leki",
                     style = MaterialTheme.typography.labelLarge,
                     color = ProPlusColors.Muted,
                 )

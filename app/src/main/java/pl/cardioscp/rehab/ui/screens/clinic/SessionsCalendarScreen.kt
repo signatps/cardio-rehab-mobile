@@ -57,6 +57,8 @@ private val DayScheduled = Color(0xFFDAF1FF)
 fun SessionsCalendarScreen(
     clinic: ClinicSnapshot,
     onStartRehab: () -> Unit,
+    canStartRehab: Boolean = true,
+    subtitle: String? = null,
 ) {
     var month by remember { mutableStateOf(YearMonth.now()) }
     var selected by remember { mutableStateOf(LocalDate.now()) }
@@ -73,6 +75,13 @@ fun SessionsCalendarScreen(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text("Kalendarz sesji", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
+        subtitle?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = ProPlusColors.Muted,
+            )
+        }
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -183,7 +192,11 @@ fun SessionsCalendarScreen(
             daySessions.forEach { s ->
                 Surface(
                     onClick = {
-                        if (s.status == PlannedSessionStatus.SCHEDULED && s.date == LocalDate.now()) {
+                        if (
+                            canStartRehab &&
+                            s.status == PlannedSessionStatus.SCHEDULED &&
+                            s.date == LocalDate.now()
+                        ) {
                             onStartRehab()
                         }
                     },

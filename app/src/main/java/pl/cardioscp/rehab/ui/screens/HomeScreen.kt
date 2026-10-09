@@ -38,6 +38,8 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
     onOpenRecordings: () -> Unit = {},
     onOpenRehabSession: () -> Unit = {},
+    /** Pacjent: tylko połączenie z urządzeniem EKG (bez scenariuszy / nagrań). */
+    connectionOnly: Boolean = false,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val electrodes by viewModel.electrodeStatus.collectAsStateWithLifecycle()
@@ -126,72 +128,81 @@ fun HomeScreen(
                 TextButton(onClick = viewModel::refreshElectrodes) {
                     Text("Odśwież elektrody")
                 }
-                Text(
-                    text = when (val bpm = state.lastPulseBpm) {
-                        null -> stringResource(R.string.pulse_waiting)
-                        else -> stringResource(R.string.pulse_bpm, bpm)
-                    },
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = ProPlusColors.Accent,
-                    textAlign = TextAlign.Center,
-                )
-                if (state.pulseSampleCount > 0) {
+                if (!connectionOnly) {
                     Text(
-                        text = stringResource(
-                            R.string.pulse_samples,
-                            state.pulseSampleCount,
-                        ),
+                        text = when (val bpm = state.lastPulseBpm) {
+                            null -> stringResource(R.string.pulse_waiting)
+                            else -> stringResource(R.string.pulse_bpm, bpm)
+                        },
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = ProPlusColors.Accent,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (state.pulseSampleCount > 0) {
+                        Text(
+                            text = stringResource(
+                                R.string.pulse_samples,
+                                state.pulseSampleCount,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = ProPlusColors.Muted,
+                        )
+                    }
+                    state.sessionLabel?.let { label ->
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    state.lastSavedScpName?.let { name ->
+                        Text(
+                            text = stringResource(R.string.scp_saved, name),
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            color = ProPlusColors.Navy,
+                        )
+                    }
+                    Button(
+                        onClick = onOpenRehabSession,
+                        enabled = electrodes.allAttached,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.start_rehab_session))
+                    }
+                    Button(
+                        onClick = viewModel::onStartPulseScenario,
+                        enabled = electrodes.allAttached,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.scenario_pulse))
+                    }
+                    Button(
+                        onClick = viewModel::onStartEcgOfflineScenario,
+                        enabled = electrodes.allAttached,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.scenario_ecg_offline))
+                    }
+                    Button(
+                        onClick = viewModel::onDownloadScp,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.download_full_scp))
+                    }
+                    OutlinedButton(
+                        onClick = onOpenRecordings,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.open_recordings))
+                    }
+                } else {
+                    Text(
+                        text = "Połączono z urządzeniem EKG. Sesję rehabilitacji uruchom z menu Rehab.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = ProPlusColors.Muted,
-                    )
-                }
-                state.sessionLabel?.let { label ->
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
                     )
-                }
-                state.lastSavedScpName?.let { name ->
-                    Text(
-                        text = stringResource(R.string.scp_saved, name),
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = ProPlusColors.Navy,
-                    )
-                }
-                Button(
-                    onClick = onOpenRehabSession,
-                    enabled = electrodes.allAttached,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.start_rehab_session))
-                }
-                Button(
-                    onClick = viewModel::onStartPulseScenario,
-                    enabled = electrodes.allAttached,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.scenario_pulse))
-                }
-                Button(
-                    onClick = viewModel::onStartEcgOfflineScenario,
-                    enabled = electrodes.allAttached,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.scenario_ecg_offline))
-                }
-                Button(
-                    onClick = viewModel::onDownloadScp,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.download_full_scp))
-                }
-                OutlinedButton(
-                    onClick = onOpenRecordings,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.open_recordings))
                 }
                 OutlinedButton(
                     onClick = viewModel::onDisconnectClicked,
@@ -242,8 +253,10 @@ fun HomeScreen(
                 TextButton(onClick = viewModel::refreshBondedDevices) {
                     Text(stringResource(R.string.refresh_bonded))
                 }
-                TextButton(onClick = onOpenRecordings) {
-                    Text(stringResource(R.string.open_recordings))
+                if (!connectionOnly) {
+                    TextButton(onClick = onOpenRecordings) {
+                        Text(stringResource(R.string.open_recordings))
+                    }
                 }
             }
         }

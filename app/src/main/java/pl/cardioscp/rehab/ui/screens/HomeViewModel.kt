@@ -17,12 +17,18 @@ import pl.cardioscp.rehab.bluetooth.ProtocolSessionController
 import pl.cardioscp.rehab.bluetooth.SppEhoMiniDeviceClient
 import pl.cardioscp.rehab.bluetooth.protocol.ElectrodeStatus
 import pl.cardioscp.rehab.CardioRehabApp
+import pl.cardioscp.rehab.auth.AppRole
+import pl.cardioscp.rehab.auth.AuthSessionStore
+import pl.cardioscp.rehab.auth.DemoUser
+import pl.cardioscp.rehab.auth.DoctorRoster
 import pl.cardioscp.rehab.clinic.ClinicDemoStore
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
 import pl.cardioscp.rehab.clinic.DiseaseStatus
 import pl.cardioscp.rehab.clinic.DoseStatus
 import pl.cardioscp.rehab.clinic.VitalKind
 import pl.cardioscp.rehab.clinic.WelcomePhrase
+import pl.cardioscp.rehab.ui.screens.clinic.DoctorPatientRow
+import pl.cardioscp.rehab.ui.screens.clinic.todayRehabSession
 import pl.cardioscp.rehab.host.MedReminderNotifier
 import pl.cardioscp.rehab.host.MedReminderScheduler
 import pl.cardioscp.rehab.scp.ScpEcgParser
@@ -57,8 +63,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val bleMeasure = BleMeasureController(application)
 
     private val clinicStore = ClinicDemoStore(application)
+    private val authStore = AuthSessionStore(application)
+    val authUser: StateFlow<DemoUser?> = authStore.user
+
     private val _clinic = MutableStateFlow(clinicStore.snapshot())
     val clinic: StateFlow<ClinicSnapshot> = _clinic
+
+    private val _selectedPatientId = MutableStateFlow(DoctorRoster.patients.first().id)
+    val selectedPatientId: StateFlow<String> = _selectedPatientId
 
     private val sessionArchive = RehabSessionArchive(application, recordingStore)
     private val sessionDayGate = SessionDayGate(application)
@@ -184,6 +196,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     init {
+        // Pacjent lokalnej kliniki = Adam Testowski (PIN 2222).
+        clinicStore.setPatientDisplayName(ClinicDemoStore.DEFAULT_PATIENT_NAME)
+        publishClinic()
         // Po północy odśwież plan dnia / dawki / sesję bez restartu aplikacji.
         viewModelScope.launch {
             while (true) {
@@ -239,6 +254,86 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         refreshEcgArchive()
         MedReminderScheduler.reschedule(application, clinicStore)
     }
+
+    fun currentRole(): AppRole? = authStore.role
+
+    fun loginWithPin(pin: String): DemoUser? {
+        val user = authStore.login(pin) ?: return null
+        when (user.role) {
+            AppRole.PATIENT -> {
+                clinicStore.setPatientDisplayName(user.displayName)
+                _selectedPatientId.value = "adam-testowski"
+            }
+            AppRole.ADMIN -> {
+                clinicStore.setPatientDisplayName(ClinicDemoStore.DEFAULT_PATIENT_NAME)
+            }
+            AppRole.DOCTOR -> {
+                _selectedPatientId.value = DoctorRoster.patients.first().id
+            }
+        }
+        publishClinic()
+        return user
+    }
+
+    fun logout() {
+        authStore.logout()
+        pendingRehabOpen = null
+        _showRehabPinDialog.value = false
+    }
+
+    fun selectDoctorPatient(patientId: String) {
+        if (DoctorRoster.byId(patientId) == null) return
+        _selectedPatientId.value = patientId
+    }
+
+    fun doctorPatientRows(): List<DoctorPatientRow> {
+        val today = LocalDate.now()
+        val local = clinicStore.snapshot()
+        return DoctorRoster.patients.map { p ->
+            val sessions = if (p.usesLocalClinic) {
+                local.sessions
+            } else {
+                DoctorRoster.seedSessions(p.id, today)
+            }
+            DoctorPatientRow(
+                patient = p,
+                todayRehab = todayRehabSession(sessions, today),
+            )
+        }
+    }
+
+    /**
+     * Snapshot widoku lekarza dla wybranego pacjenta.
+     * Adam → lokalna klinika; pozostali → seed sesji (bez pomiarów poza sesją).
+     */
+    fun doctorClinicForSelected(): ClinicSnapshot {
+        val selected = DoctorRoster.byId(_selectedPatientId.value)
+            ?: DoctorRoster.patients.first()
+        if (selected.usesLocalClinic) {
+            return clinicStore.snapshot().copy(patientName = selected.displayName)
+        }
+        val today = LocalDate.now()
+        val sessions = DoctorRoster.seedSessions(selected.id, today)
+        return ClinicSnapshot(
+            patientName = selected.displayName,
+            planDate = today,
+            measurements = emptyList(),
+            medications = emptyList(),
+            todayDoses = emptyList(),
+            diseases = emptyList(),
+            sessions = sessions,
+            dayPlan = emptyList(),
+        )
+    }
+
+    fun doctorRehabMeasurements(): List<pl.cardioscp.rehab.clinic.ClinicMeasurement> {
+        val selected = DoctorRoster.byId(_selectedPatientId.value)
+            ?: return emptyList()
+        if (!selected.usesLocalClinic) return emptyList()
+        return clinicStore.snapshot().measurements.filter { it.sessionGroupId != null }
+    }
+
+    fun canBrowseEcg(): Boolean = currentRole() == AppRole.ADMIN
 
     /** Wejście w sesję rehab — przy zużytym slocie dnia pokazuje PIN. */
     fun requestOpenRehab(open: () -> Unit) {

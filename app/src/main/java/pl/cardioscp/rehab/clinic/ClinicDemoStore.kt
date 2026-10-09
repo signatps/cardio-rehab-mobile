@@ -22,6 +22,8 @@ class ClinicDemoStore(context: Context) {
     private var sessions = defaultSessions(calendarToday())
     /** Ostatni dzień, dla którego zmaterializowano dawki / sesję. */
     private var activePlanDay: LocalDate = calendarToday()
+    /** Pacjent lokalnej kliniki (demo) — domyślnie Adam Testowski. */
+    private var patientDisplayName: String = DEFAULT_PATIENT_NAME
 
     init {
         loadPersisted()
@@ -49,11 +51,18 @@ class ClinicDemoStore(context: Context) {
         return rolled
     }
 
+    fun setPatientDisplayName(name: String) {
+        val trimmed = name.trim().ifBlank { DEFAULT_PATIENT_NAME }
+        if (trimmed == patientDisplayName) return
+        patientDisplayName = trimmed
+        persist()
+    }
+
     fun snapshot(): ClinicSnapshot {
         refreshCalendarDay()
         val day = calendarToday()
         return ClinicSnapshot(
-            patientName = "Jan Kowalski",
+            patientName = patientDisplayName,
             planDate = day,
             measurements = measurements.sortedByDescending { it.measuredAtMs },
             medications = medications,
@@ -575,6 +584,7 @@ class ClinicDemoStore(context: Context) {
             },
         )
         root.put("activePlanDay", activePlanDay.toString())
+        root.put("patientDisplayName", patientDisplayName)
         prefs.edit().putString(KEY_STATE, root.toString()).apply()
     }
 
@@ -582,6 +592,12 @@ class ClinicDemoStore(context: Context) {
         val raw = prefs.getString(KEY_STATE, null) ?: return
         runCatching {
             val root = JSONObject(raw)
+            patientDisplayName = root.optString("patientDisplayName", DEFAULT_PATIENT_NAME)
+                .ifBlank { DEFAULT_PATIENT_NAME }
+            // Migracja ze starego demo „Jan Kowalski”.
+            if (patientDisplayName == "Jan Kowalski") {
+                patientDisplayName = DEFAULT_PATIENT_NAME
+            }
             if (root.has("measurements")) {
                 val arr = root.getJSONArray("measurements")
                 measurements = buildList {
@@ -789,6 +805,7 @@ class ClinicDemoStore(context: Context) {
         private const val PREFS = "clinic_demo"
         /** v2 — puste leki/choroby; pomiary tylko z realnych pomiarów (bez seedów). */
         private const val KEY_STATE = "state_v2"
+        const val DEFAULT_PATIENT_NAME = "Adam Testowski"
 
         /** Identyfikatory starych fikcyjnych pomiarów — nie pokazujemy ich w historii. */
         private val SEED_MEASUREMENT_IDS = setOf(

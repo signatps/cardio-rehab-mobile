@@ -6,13 +6,27 @@ Aplikacja Android do **domowej rehabilitacji kardiologicznej (CardioSCP)** wspó
 
 Repozytorium: [signatps/cardio-rehab-mobile](https://github.com/signatps/cardio-rehab-mobile)
 
+## Role (PIN na starcie)
+
+Po splashu wybór roli + PIN (demo):
+
+| Użytkownik | Rola | PIN |
+|---|---|---|
+| Jan Lekarski | Lekarz | `1111` |
+| Adam Testowski | Pacjent | `2222` |
+| Admin Adminowy | Admin | `9999` |
+
+- **Pacjent** — pulpit (leki + sesja rehab), sesje, plan dnia, pomiary (ciśnienie/waga + wyniki), leki, choroby, sesja rehab, urządzenie (tylko połączenie EKG). Bez menu EKG.
+- **Lekarz** — lista pacjentów, kalendarz/status sesji, przegląd wyników tylko z sesji rehab.
+- **Admin** — pełna aplikacja jak dotychczas.
+
 ## Status
 
 Działa połączenie **Bluetooth Classic SPP** z `PRO_PLUS_ECG_******` oraz **BLE** do ciśnienia/wagi (port z mobile-DSD).
 
 UI w stylu **CardioSCP / mobile-DSD**: lewe menu + prawa ramka treści, kalendarz sesji, plan dnia, leki, choroby, pomiary (demo lokalne). **Leki** — wyszukiwanie w zaszytym katalogu **RPL (MZ)** (`assets/rpl_medications.json.gz`, jak w DSD-mobile), opcjonalne odświeżenie z APK, usuwanie pozycji. **Choroby** — katalog **ICD-10 PL + ICD-9 NFZ** (`assets/icd_pl.json.gz`), filtry ICD-9/10, opcjonalna aktualizacja z sieci. **Plan dnia** — aktualna data kalendarzowa, rollover o północy (nowe dawki + nowa sesja), przełącznik lista / kalendarz godzin. **Leki** — potwierdzanie jak w DSD-mobile: Przyjęte / Pominięte (słownik powodów) / Później (przesunięcie terminu). Na pulpicie **powitanie głosowe** (TTS): imię + plan leków i sesji rehab; po wykonanej sesji przypomina tylko o lekach.
 
-**Sesja rehabilitacji** (po SPP): EKG spoczynkowe → ciśnienie BLE → waga BLE (gdy HF) → ankieta kwalifikacyjna → trening sekwencyjny interwałowy (domyślnie 2×15 s wysiłek / 15 s odpoczynek, akwizycja EKG 5 s) → podsumowanie z przeglądem EKG z sesji.
+**Sesja rehabilitacji** (po SPP): EKG spoczynkowe → ciśnienie BLE → waga BLE (gdy HF) → ankieta kwalifikacyjna → trening → skala Borga → podsumowanie.
 
 Scenariusze ręczne:
 

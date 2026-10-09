@@ -109,6 +109,7 @@ fun RehabSessionScreen(
     viewModel: HomeViewModel,
     onBack: () -> Unit,
     onOpenEcg: () -> Unit,
+    canOpenEcg: Boolean = true,
 ) {
     val session by viewModel.rehabSession.collectAsStateWithLifecycle()
     val electrodes by viewModel.electrodeStatus.collectAsStateWithLifecycle()
@@ -368,9 +369,12 @@ fun RehabSessionScreen(
             )
             RehabStep.SUMMARY -> SummaryContent(
                 state = state,
+                canOpenEcg = canOpenEcg,
                 onOpenEcg = { entry ->
-                    viewModel.openSessionEcg(entry)
-                    onOpenEcg()
+                    if (canOpenEcg) {
+                        viewModel.openSessionEcg(entry)
+                        onOpenEcg()
+                    }
                 },
                 onDone = {
                     viewModel.markTodayRehabSessionDone()
@@ -1449,6 +1453,7 @@ private fun LiveEcgPreview(
 @Composable
 private fun SummaryContent(
     state: pl.cardioscp.rehab.session.RehabSessionState,
+    canOpenEcg: Boolean = true,
     onOpenEcg: (pl.cardioscp.rehab.session.SessionEcgEntry) -> Unit,
     onDone: () -> Unit,
 ) {
@@ -1537,7 +1542,11 @@ private fun SummaryContent(
                     EcgHrTrendCard(
                         title = EcgHrTrendEngine.shortLabel(entry.label),
                         trend = trend,
-                        onClick = { onOpenEcg(entry) },
+                        onClick = if (canOpenEcg) {
+                            { onOpenEcg(entry) }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -1549,12 +1558,14 @@ private fun SummaryContent(
 private fun EcgHrTrendCard(
     title: String,
     trend: EcgHrTrend,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
 ) {
     Surface(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
+            ),
         shape = RoundedCornerShape(10.dp),
         border = BorderStroke(1.dp, ProPlusColors.Line),
         color = ProPlusColors.Surface,
