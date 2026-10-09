@@ -1,6 +1,5 @@
 package pl.cardioscp.rehab.ui.screens.clinic
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
@@ -33,7 +31,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -167,7 +164,7 @@ fun MeasurementsScreen(
                 Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 patientRegisterKinds.forEach { kind ->
                     val latest = clinic.measurements.firstOrNull {
@@ -186,7 +183,6 @@ fun MeasurementsScreen(
                             }
                         },
                         onFilter = { filter = MeasureFilter.Kind(kind) },
-                        modifier = Modifier.widthIn(min = 168.dp, max = 220.dp),
                     )
                 }
             }
@@ -347,64 +343,41 @@ private fun PatientMeasureTile(
     onFilter: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        modifier = modifier.heightIn(min = 88.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = ProPlusColors.Surface,
-        border = BorderStroke(1.dp, ProPlusColors.Line),
+    Column(
+        modifier = modifier
+            .widthIn(min = 88.dp, max = 112.dp)
+            .clickable(onClick = onFilter)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        VitalKindPictogram(
+            kind = kind,
+            tint = ProPlusColors.Accent,
+            iconSize = 22.dp,
+        )
+        Text(
+            kind.shortLabel(),
+            style = MaterialTheme.typography.labelMedium,
+            color = ProPlusColors.Muted,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            latestValue ?: "—",
+            style = MaterialTheme.typography.titleSmall,
+            color = ProPlusColors.Navy,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Button(
+            onClick = onMeasure,
+            modifier = Modifier.heightIn(min = 34.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = ProPlusColors.Accent),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
         ) {
-            Row(
-                Modifier
-                    .weight(1f)
-                    .clickable(onClick = onFilter),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Box(
-                    Modifier
-                        .size(40.dp)
-                        .background(ProPlusColors.Accent.copy(alpha = 0.14f), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    VitalKindPictogram(
-                        kind = kind,
-                        tint = ProPlusColors.Accent,
-                        iconSize = 18.dp,
-                    )
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        kind.shortLabel(),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = ProPlusColors.Muted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        latestValue ?: "—",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = ProPlusColors.Navy,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            Button(
-                onClick = onMeasure,
-                modifier = Modifier.heightIn(min = 36.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ProPlusColors.Accent),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-            ) {
-                Text("Pomiar", style = MaterialTheme.typography.labelLarge)
-            }
+            Text("Pomiar", style = MaterialTheme.typography.labelLarge)
         }
     }
 }

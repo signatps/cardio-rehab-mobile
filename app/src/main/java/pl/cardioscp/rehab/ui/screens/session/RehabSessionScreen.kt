@@ -1015,7 +1015,7 @@ private fun TrainingPhaseContent(
                     AnimatedNordicWalker(
                         contentDescription = headline,
                         size = 110.dp,
-                        animated = true,
+                        animated = !training.pausedForEvent,
                     )
                 } else {
                     CoachArt(
