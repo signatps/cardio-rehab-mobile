@@ -305,7 +305,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 cycles = 2,
                 exerciseSec = 15,
                 restSec = 15,
-                acquireSec = 5,
+                acquireSec = 15,
                 admissionWaitSec = 10,
                 heartRateLimits = heartRateLimits,
             )

@@ -24,7 +24,7 @@ data class TrainingPlan(
     /** Czas odpoczynku [s] — startuje po zakończeniu EKG szczytowego. */
     val restSec: Int = 15,
     /** Długość fragmentu EKG [s] (Offline: czas Offline; Online: wycinek taśmy). */
-    val acquireSec: Int = 5,
+    val acquireSec: Int = 15,
     /** Automatyczne dopuszczenie po ankiecie [s]. */
     val admissionWaitSec: Int = 10,
     /** Limity tętna per cykl (min–max). Brak wpisu = brak coachingu w cyklu. */
