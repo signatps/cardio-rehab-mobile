@@ -571,6 +571,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 surveyAnswers = live.surveyAnswers,
                 cycleHrSummaries = live.cycleHrSummaries,
                 extraViaPin = pendingExtraViaPin || sessionDayGate.isCurrentStartExtra(),
+                borgScore = live.borgScore,
             )
             refreshEcgArchive()
         }
@@ -611,6 +612,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun skipWeight() = rehabEngine.skipWeight()
     fun answerSurvey(questionId: String, yes: Boolean) = rehabEngine.answerSurvey(questionId, yes)
     fun submitSurvey() = rehabEngine.submitSurvey()
+    fun selectBorgScore(score: Int) = rehabEngine.selectBorgScore(score)
+    fun submitBorg() = rehabEngine.submitBorg()
     fun finishDisqualified() {
         rehabEngine.finishDisqualified()
     }

@@ -35,6 +35,8 @@ data class ArchivedRehabSession(
     val cycleHrSummaries: List<CycleHrSummary> = emptyList(),
     /** Sesja dodatkowa tego samego dnia po PIN opiekuna. */
     val extraViaPin: Boolean = false,
+    /** Skala Borga RPE 6–20 po treningu. */
+    val borgScore: Int? = null,
 )
 
 /** Archiwum sesji rehab z listą zapisanych EKG (zakładka EKG). */
@@ -65,6 +67,7 @@ class RehabSessionArchive(
         surveyAnswers: Map<String, Boolean> = emptyMap(),
         cycleHrSummaries: List<CycleHrSummary> = emptyList(),
         extraViaPin: Boolean = false,
+        borgScore: Int? = null,
     ): ArchivedRehabSession? {
         if (entries.isEmpty()) return null
         val nextNum = (sessions.maxOfOrNull { it.sessionNumber } ?: 0) + 1
@@ -91,6 +94,7 @@ class RehabSessionArchive(
             surveyAnswers = surveyAnswers,
             cycleHrSummaries = cycleHrSummaries.sortedBy { it.cycle },
             extraViaPin = extraViaPin,
+            borgScore = borgScore,
         )
         sessions = sessions + archived
         persist()
@@ -191,6 +195,7 @@ class RehabSessionArchive(
                     .put("weightSummary", s.weightSummary)
                     .put("surveyPassed", s.surveyPassed)
                     .put("extraViaPin", s.extraViaPin)
+                    .put("borgScore", s.borgScore)
                     .put(
                         "surveyAnswers",
                         JSONObject().also { ans ->
@@ -300,6 +305,7 @@ class RehabSessionArchive(
                             surveyAnswers = surveyAnswers,
                             cycleHrSummaries = cycleHr,
                             extraViaPin = o.optBoolean("extraViaPin", false),
+                            borgScore = o.optInt("borgScore", -1).takeIf { it in 6..20 },
                         ),
                     )
                 }

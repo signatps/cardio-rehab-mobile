@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.MonitorHeart
@@ -79,6 +80,7 @@ import kotlinx.coroutines.delay
 import pl.cardioscp.rehab.R
 import pl.cardioscp.rehab.bluetooth.protocol.ElectrodeStatus
 import pl.cardioscp.rehab.session.BaselineEcgPhase
+import pl.cardioscp.rehab.session.BorgScale
 import pl.cardioscp.rehab.session.CycleHeartRateLimit
 import pl.cardioscp.rehab.session.DefaultRehabSurvey
 import pl.cardioscp.rehab.session.EcgAcquisitionMode
@@ -166,6 +168,7 @@ fun RehabSessionScreen(
                 RehabStep.VITALS_BP -> "Wykonaj pomiar ciśnienia"
                 RehabStep.VITALS_WEIGHT -> "Wykonaj pomiar masy ciała"
                 RehabStep.SURVEY -> "Uzupełnij ankietę o stanie zdrowia"
+                RehabStep.BORG -> "Oceń odczuwany wysiłek — skala Borga"
                 RehabStep.SUMMARY -> "Sesja rehabilitacji zakończona"
                 else -> null
             }
@@ -358,6 +361,11 @@ fun RehabSessionScreen(
                     )
                 }
             }
+            RehabStep.BORG -> BorgContent(
+                selected = state.borgScore,
+                onSelect = viewModel::selectBorgScore,
+                onSubmit = viewModel::submitBorg,
+            )
             RehabStep.SUMMARY -> SummaryContent(
                 state = state,
                 onOpenEcg = { entry ->
@@ -387,7 +395,8 @@ private fun StepHeader(step: RehabStep) {
         RehabStep.SURVEY_DISQUALIFIED -> "Ankieta — dyskwalifikacja"
         RehabStep.ADMISSION_WAIT -> "4. Start treningu"
         RehabStep.TRAINING -> "5. Trening sekwencyjny"
-        RehabStep.SUMMARY -> "6. Podsumowanie"
+        RehabStep.BORG -> "6. Skala Borga"
+        RehabStep.SUMMARY -> "7. Podsumowanie"
     }
     Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(8.dp))
@@ -563,6 +572,7 @@ private fun SessionTimelineStrip(includeWeight: Boolean) {
         TimelineStep(Icons.Outlined.Assignment, "A", "Ankieta"),
         TimelineStep(Icons.Outlined.HourglassBottom, "▶", "Start treningu"),
         TimelineStep(Icons.AutoMirrored.Outlined.DirectionsRun, "T", "Trening"),
+        TimelineStep(Icons.Outlined.FavoriteBorder, "B", "Borg"),
         TimelineStep(Icons.Outlined.Summarize, "Σ", "Podsumowanie"),
     )
     Column(Modifier.fillMaxWidth()) {
@@ -859,6 +869,94 @@ private fun SurveyAnswerChip(
             fontWeight = if (preferred || selected) FontWeight.Bold else FontWeight.Normal,
             color = if (selected) ProPlusColors.Accent else ProPlusColors.Navy,
         )
+    }
+}
+
+@Composable
+private fun BorgContent(
+    selected: Int?,
+    onSelect: (Int) -> Unit,
+    onSubmit: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CoachArt(
+                resId = R.drawable.coach_survey,
+                contentDescription = "Skala Borga",
+                size = 72.dp,
+            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Oceń odczuwany wysiłek (skala Borga)",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = ProPlusColors.Navy,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    if (selected != null) {
+                        "Wybrano: ${BorgScale.summaryPl(selected)}"
+                    } else {
+                        "Wybierz jedną wartość z pełnej skali 6–20"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ProPlusColors.Muted,
+                )
+            }
+            Button(
+                onClick = onSubmit,
+                enabled = selected != null,
+                modifier = Modifier.height(36.dp),
+                contentPadding = ButtonDefaults.ContentPadding,
+            ) {
+                Icon(
+                    Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("Zatwierdź", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        BorgScale.levels.forEach { level ->
+            val isSelected = selected == level.score
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    if (level.labelPl.isBlank()) {
+                        "${level.score}"
+                    } else {
+                        "${level.score}  ·  ${level.labelPl}"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ProPlusColors.Navy,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 2,
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                )
+                SurveyAnswerChip(
+                    label = "${level.score}",
+                    selected = isSelected,
+                    preferred = isSelected,
+                    onClick = { onSelect(level.score) },
+                )
+            }
+        }
     }
 }
 
@@ -1395,6 +1493,12 @@ private fun SummaryContent(
             }
             Text(
                 "Ankieta: ${DefaultRehabSurvey.evaluate(state.surveyAnswers)}",
+                style = MaterialTheme.typography.titleSmall,
+                color = ProPlusColors.Navy,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "Borg: ${BorgScale.summaryPl(state.borgScore)}",
                 style = MaterialTheme.typography.titleSmall,
                 color = ProPlusColors.Navy,
                 fontWeight = FontWeight.SemiBold,

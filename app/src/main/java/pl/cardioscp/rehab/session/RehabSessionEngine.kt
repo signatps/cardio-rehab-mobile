@@ -365,11 +365,36 @@ class RehabSessionEngine(
         finishProtocolAfterTraining()
         update {
             it.copy(
-                step = RehabStep.SUMMARY,
+                step = RehabStep.BORG,
                 training = null,
                 busy = false,
                 liveEcg = null,
-                statusMessage = if (abortTraining) "Trening przerwany" else "Trening zakończony",
+                statusMessage = if (abortTraining) {
+                    "Trening przerwany — oceń odczuwany wysiłek"
+                } else {
+                    "Trening zakończony — oceń odczuwany wysiłek (Borg)"
+                },
+            )
+        }
+    }
+
+    fun selectBorgScore(score: Int) {
+        if (!BorgScale.isValid(score)) return
+        update { it.copy(borgScore = score, error = null) }
+    }
+
+    fun submitBorg() {
+        val s = _state.value ?: return
+        if (s.borgScore == null || !BorgScale.isValid(s.borgScore)) {
+            update { it.copy(error = "Wybierz wartość skali Borga (6–20)") }
+            return
+        }
+        update {
+            it.copy(
+                step = RehabStep.SUMMARY,
+                busy = false,
+                error = null,
+                statusMessage = "Borg ${BorgScale.summaryPl(it.borgScore)}",
             )
         }
     }
@@ -770,10 +795,10 @@ class RehabSessionEngine(
             scope.launch { finishProtocolAfterTraining() }
             update {
                 it.copy(
-                    step = RehabStep.SUMMARY,
+                    step = RehabStep.BORG,
                     training = null,
                     liveEcg = null,
-                    statusMessage = "Trening przerwany (zdarzenie EKG)",
+                    statusMessage = "Trening przerwany — oceń odczuwany wysiłek",
                 )
             }
         } else {

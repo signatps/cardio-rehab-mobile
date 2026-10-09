@@ -12,6 +12,8 @@ enum class RehabStep {
     SURVEY_DISQUALIFIED,
     ADMISSION_WAIT,
     TRAINING,
+    /** Skala Borga po treningu (przed podsumowaniem). */
+    BORG,
     SUMMARY,
 }
 
@@ -63,6 +65,8 @@ data class RehabSessionState(
     val trainingPlan: TrainingPlan = TrainingPlan(),
     val vitals: SessionVitals = SessionVitals(),
     val surveyAnswers: Map<String, Boolean> = emptyMap(),
+    /** Skala Borga RPE 6–20 po treningu (null = jeszcze nie wybrano). */
+    val borgScore: Int? = null,
     val ecgEntries: List<SessionEcgEntry> = emptyList(),
     val training: TrainingLiveState? = null,
     /** Podsumowanie tętna per cykl (po zakończeniu wysiłków). */

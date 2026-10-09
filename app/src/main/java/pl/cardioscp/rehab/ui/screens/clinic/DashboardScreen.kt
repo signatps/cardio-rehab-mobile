@@ -65,6 +65,7 @@ import pl.cardioscp.rehab.clinic.DayPlanTone
 import pl.cardioscp.rehab.clinic.VitalKind
 import pl.cardioscp.rehab.clinic.WelcomePhrase
 import pl.cardioscp.rehab.session.ArchivedRehabSession
+import pl.cardioscp.rehab.session.BorgScale
 import pl.cardioscp.rehab.session.CycleHrSummary
 import pl.cardioscp.rehab.session.CycleHrZoneOutcome
 import pl.cardioscp.rehab.ui.components.ElectrodeMannequin
@@ -560,6 +561,13 @@ private fun SessionPlanTile(
                         )
                     }
                     SurveyPictogram(archived.surveyPassed)
+                    archived.borgScore?.let { borg ->
+                        PictogramValue(
+                            icon = Icons.Outlined.FavoriteBorder,
+                            value = "Borg ${BorgScale.summaryPl(borg)}",
+                            valueColor = ProPlusColors.Navy,
+                        )
+                    }
                 }
                 if (archived.cycleHrSummaries.isNotEmpty()) {
                     Row(
