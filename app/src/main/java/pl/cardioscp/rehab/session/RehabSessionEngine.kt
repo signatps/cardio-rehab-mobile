@@ -42,7 +42,11 @@ class RehabSessionEngine(
     @Volatile private var skipCurrentPhase: Boolean = false
     @Volatile private var abortTraining: Boolean = false
 
-    fun start(includeWeight: Boolean = true, plan: TrainingPlan = TrainingPlan()) {
+    fun start(
+        includeWeight: Boolean = true,
+        plan: TrainingPlan = TrainingPlan(),
+        ecgMode: EcgAcquisitionMode = EcgAcquisitionMode.OFFLINE,
+    ) {
         trainingJob?.cancel()
         admissionJob?.cancel()
         pulseWatchJob?.cancel()
@@ -50,6 +54,7 @@ class RehabSessionEngine(
         _state.value = RehabSessionState(
             step = RehabStep.INTRO,
             includeWeight = includeWeight,
+            ecgMode = ecgMode,
             trainingPlan = plan,
         )
     }
@@ -597,7 +602,7 @@ class RehabSessionEngine(
         )
     }
 
-    /** Init → Offline → Done → End → Init → GetScp → zapis. */
+    /** Init → Offline[/Online] → Done → End → Init → GetScp → zapis. */
     private suspend fun acquireEcg(label: String, totalSeconds: Int): Result<ScpRecording> {
         return runCatching {
             if (deviceClient.connectionState.value !is EhoMiniConnectionState.Connected) {
@@ -609,8 +614,40 @@ class RehabSessionEngine(
                 error(electrodes.summaryPl)
             }
             val userId = userIdProvider()
-            update { it.copy(statusMessage = "$label: Init + EKG Offline (${totalSeconds}s)…") }
-            sessionController.runEcgOfflineCreate(userId, totalSeconds = totalSeconds)
+            val mode = _state.value?.ecgMode ?: EcgAcquisitionMode.OFFLINE
+            val liveJob = if (mode == EcgAcquisitionMode.ONLINE) {
+                scope.launch {
+                    sessionController.liveEcg.collect { snap ->
+                        update { it.copy(liveEcg = snap) }
+                    }
+                }
+            } else {
+                null
+            }
+            try {
+                when (mode) {
+                    EcgAcquisitionMode.ONLINE -> {
+                        update {
+                            it.copy(
+                                statusMessage = "$label: EKG Online + Offline (${totalSeconds}s)…",
+                                liveEcg = sessionController.liveEcg.value,
+                            )
+                        }
+                        sessionController.runEcgOnlineAcquire(userId, totalSeconds = totalSeconds)
+                    }
+                    EcgAcquisitionMode.OFFLINE -> {
+                        update {
+                            it.copy(
+                                statusMessage = "$label: Init + EKG Offline (${totalSeconds}s)…",
+                                liveEcg = null,
+                            )
+                        }
+                        sessionController.runEcgOfflineCreate(userId, totalSeconds = totalSeconds)
+                    }
+                }
+            } finally {
+                liveJob?.cancel()
+            }
             update { it.copy(statusMessage = "$label: pobieranie SCP…") }
             val bytes = sessionController.runScpDownload()
             val serial = (deviceClient.connectionState.value as? EhoMiniConnectionState.Connected)

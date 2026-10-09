@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -76,12 +77,14 @@ import pl.cardioscp.rehab.bluetooth.protocol.ElectrodeStatus
 import pl.cardioscp.rehab.session.BaselineEcgPhase
 import pl.cardioscp.rehab.session.CycleHeartRateLimit
 import pl.cardioscp.rehab.session.DefaultRehabSurvey
+import pl.cardioscp.rehab.session.EcgAcquisitionMode
 import pl.cardioscp.rehab.session.EcgHrTrend
 import pl.cardioscp.rehab.session.EcgHrTrendEngine
 import pl.cardioscp.rehab.session.ExerciseKind
 import pl.cardioscp.rehab.session.HeartRateCoach
 import pl.cardioscp.rehab.session.HeartRateCoachCue
 import pl.cardioscp.rehab.session.HeartRateValueTone
+import pl.cardioscp.rehab.session.LiveEcgSnapshot
 import pl.cardioscp.rehab.session.RehabStep
 import pl.cardioscp.rehab.session.TrainingCoachVisual
 import pl.cardioscp.rehab.session.TrainingPhaseKind
@@ -90,6 +93,7 @@ import pl.cardioscp.rehab.ui.components.AnalogGauge
 import pl.cardioscp.rehab.ui.components.CoachBannerColors
 import pl.cardioscp.rehab.ui.components.ElectrodeMannequin
 import pl.cardioscp.rehab.ui.components.FlashingCoachBanner
+import pl.cardioscp.rehab.ui.ecg.EcgPaper
 import pl.cardioscp.rehab.ui.screens.HomeViewModel
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 
@@ -127,8 +131,8 @@ fun RehabSessionScreen(
             IntroContent(
                 electrodes = electrodes,
                 onRefreshElectrodes = viewModel::refreshElectrodes,
-                onStart = { includeWeight, limits ->
-                    viewModel.startRehabSession(includeWeight, limits)
+                onStart = { includeWeight, limits, ecgMode ->
+                    viewModel.startRehabSession(includeWeight, limits, ecgMode)
                 },
             )
             return
@@ -163,8 +167,8 @@ fun RehabSessionScreen(
             RehabStep.INTRO -> IntroContent(
                 electrodes = electrodes,
                 onRefreshElectrodes = viewModel::refreshElectrodes,
-                onStart = { includeWeight, limits ->
-                    viewModel.startRehabSession(includeWeight, limits)
+                onStart = { includeWeight, limits, ecgMode ->
+                    viewModel.startRehabSession(includeWeight, limits, ecgMode)
                 },
             )
             RehabStep.ECG_BASELINE -> {
@@ -173,6 +177,8 @@ fun RehabSessionScreen(
                     busy = state.busy,
                     phase = state.baselineEcgPhase ?: BaselineEcgPhase.ELECTRODE_CHECK,
                     electrodes = electrodes,
+                    ecgMode = state.ecgMode,
+                    liveEcg = state.liveEcg,
                     onRetry = viewModel::beginBaselineEcg,
                 )
             }
@@ -322,6 +328,8 @@ fun RehabSessionScreen(
                         training = t,
                         exerciseKind = state.trainingPlan.exerciseKind,
                         electrodes = electrodes,
+                        ecgMode = state.ecgMode,
+                        liveEcg = state.liveEcg,
                         onSpeakCue = viewModel::speakHeartRateCue,
                         onSpeakCoach = viewModel::speakCoachMessage,
                         onComment = viewModel::reportEcgEvent,
@@ -370,9 +378,14 @@ private fun StepHeader(step: RehabStep) {
 private fun IntroContent(
     electrodes: ElectrodeStatus,
     onRefreshElectrodes: () -> Unit,
-    onStart: (includeWeight: Boolean, limits: List<CycleHeartRateLimit>) -> Unit,
+    onStart: (
+        includeWeight: Boolean,
+        limits: List<CycleHeartRateLimit>,
+        ecgMode: EcgAcquisitionMode,
+    ) -> Unit,
 ) {
     var includeWeight by remember { mutableStateOf(true) }
+    var ecgMode by remember { mutableStateOf(EcgAcquisitionMode.OFFLINE) }
     val defaults = remember { HeartRateCoach.defaultLimits(2) }
     var cycleMins by remember { mutableStateOf(defaults.map { it.minBpm }) }
     var cycleMaxs by remember { mutableStateOf(defaults.map { it.maxBpm }) }
@@ -389,6 +402,28 @@ private fun IntroContent(
             color = ProPlusColors.Navy,
         )
         SessionTimelineStrip(includeWeight = includeWeight)
+        Text(
+            "Tryb EKG (EHO-Mini)",
+            style = MaterialTheme.typography.titleMedium,
+            color = ProPlusColors.Navy,
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            EcgAcquisitionMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = ecgMode == mode,
+                    onClick = { ecgMode = mode },
+                    label = { Text(mode.labelPl) },
+                )
+            }
+        }
+        Text(
+            ecgMode.hintPl,
+            style = MaterialTheme.typography.bodySmall,
+            color = ProPlusColors.Muted,
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = includeWeight, onCheckedChange = { includeWeight = it })
             Text("Niewydolność serca — mierz także wagę")
@@ -452,7 +487,7 @@ private fun IntroContent(
                                 maxBpm = cycleMaxs[idx],
                             )
                         }
-                        onStart(includeWeight, limits)
+                        onStart(includeWeight, limits, ecgMode)
                     },
                     enabled = canStart,
                     modifier = Modifier.fillMaxWidth(),
@@ -766,6 +801,8 @@ private fun TrainingPhaseContent(
     training: pl.cardioscp.rehab.session.TrainingLiveState,
     exerciseKind: ExerciseKind,
     electrodes: ElectrodeStatus,
+    ecgMode: EcgAcquisitionMode,
+    liveEcg: LiveEcgSnapshot?,
     onSpeakCue: (String) -> Unit,
     onSpeakCoach: (String) -> Unit,
     onComment: () -> Unit,
@@ -971,10 +1008,19 @@ private fun TrainingPhaseContent(
                         Text("bpm", style = MaterialTheme.typography.titleSmall, color = ProPlusColors.Muted)
                     }
                     visual == TrainingCoachVisual.HOLD_STILL_ECG -> {
-                        LinearProgressIndicator(
-                            progress = { 0f },
-                            modifier = Modifier.fillMaxWidth(0.85f),
-                        )
+                        if (ecgMode == EcgAcquisitionMode.ONLINE) {
+                            LiveEcgPreview(
+                                liveEcg = liveEcg,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp),
+                            )
+                        } else {
+                            LinearProgressIndicator(
+                                progress = { 0f },
+                                modifier = Modifier.fillMaxWidth(0.85f),
+                            )
+                        }
                     }
                 }
             }
@@ -1016,6 +1062,8 @@ private fun EcgHoldStillPanel(
     busy: Boolean,
     phase: BaselineEcgPhase,
     electrodes: ElectrodeStatus,
+    ecgMode: EcgAcquisitionMode,
+    liveEcg: LiveEcgSnapshot?,
     onRetry: () -> Unit,
 ) {
     val checking = phase == BaselineEcgPhase.ELECTRODE_CHECK
@@ -1025,6 +1073,7 @@ private fun EcgHoldStillPanel(
     } else {
         "Trwa zapis EKG"
     }
+    val showLive = !checking && ecgMode == EcgAcquisitionMode.ONLINE
     Column(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1043,12 +1092,12 @@ private fun EcgHoldStillPanel(
             CoachArt(
                 resId = coachRes,
                 contentDescription = headline,
-                size = 150.dp,
+                size = if (showLive) 110.dp else 150.dp,
                 modifier = Modifier.weight(1f),
             )
             ElectrodeMannequin(
                 status = electrodes,
-                size = 150.dp,
+                size = if (showLive) 110.dp else 150.dp,
                 showLegend = true,
                 modifier = Modifier.weight(1f),
             )
@@ -1060,6 +1109,19 @@ private fun EcgHoldStillPanel(
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
+        if (showLive) {
+            Text(
+                "Tryb Online — podgląd EKG",
+                style = MaterialTheme.typography.labelMedium,
+                color = ProPlusColors.Accent,
+            )
+            LiveEcgPreview(
+                liveEcg = liveEcg,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+            )
+        }
         if (busy) {
             LinearProgressIndicator(
                 progress = { if (checking) 0.35f else 0f },
@@ -1068,6 +1130,62 @@ private fun EcgHoldStillPanel(
         } else {
             Button(onClick = onRetry, modifier = Modifier.widthIn(min = 160.dp, max = 240.dp)) {
                 Text("Ponów EKG")
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiveEcgPreview(
+    liveEcg: LiveEcgSnapshot?,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = ProPlusColors.Surface,
+        border = BorderStroke(1.dp, ProPlusColors.Line),
+    ) {
+        when {
+            liveEcg?.onlineUnsupported == true -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "Podgląd Online niedostępny na tym firmware — trwa zapis Offline/SCP.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ProPlusColors.Muted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+            liveEcg != null && liveEcg.hasTrace -> {
+                EcgPaper(
+                    leads = liveEcg.leads,
+                    samplingHz = liveEcg.samplingHz,
+                    mmPerSec = 25,
+                    mmPerMv = 10,
+                    rPeaks = intArrayOf(),
+                    showR = false,
+                    followLive = true,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(4.dp),
+                )
+            }
+            else -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        if (liveEcg?.streaming == true) {
+                            "Oczekiwanie na próbki EKG Online…"
+                        } else {
+                            "Uruchamianie strumienia EKG Online…"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ProPlusColors.Muted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
             }
         }
     }

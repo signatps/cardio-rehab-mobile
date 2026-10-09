@@ -200,6 +200,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             "Scenariusz 2: odbiór pulsu…"
                         ProtocolSessionController.Scenario.ECG_OFFLINE_CREATE ->
                             "Scenariusz 3: zapis ECG Offline na urządzeniu…"
+                        ProtocolSessionController.Scenario.ECG_ONLINE_ACQUIRE ->
+                            "EKG Online + Offline — strumień i zapis SCP…"
                         ProtocolSessionController.Scenario.SCP_DOWNLOAD ->
                             "Pobieranie całego pliku SCP…"
                     }
@@ -282,12 +284,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         includeWeight: Boolean = true,
         heartRateLimits: List<pl.cardioscp.rehab.session.CycleHeartRateLimit> =
             pl.cardioscp.rehab.session.HeartRateCoach.defaultLimits(2),
+        ecgMode: pl.cardioscp.rehab.session.EcgAcquisitionMode =
+            pl.cardioscp.rehab.session.EcgAcquisitionMode.OFFLINE,
     ) {
         viewModelScope.launch {
             val day = LocalDate.now()
             val slotUsed = clinicStore.isTodayRehabSlotUsed(day) || hasArchivedSessionToday(day)
             if (sessionDayGate.requiresPinForNewSession(day, slotUsed)) {
-                rehabEngine.start(includeWeight = includeWeight, plan = TrainingPlan())
+                rehabEngine.start(includeWeight = includeWeight, plan = TrainingPlan(), ecgMode = ecgMode)
                 rehabEngine.setGateError(
                     "Dziś sesja już się odbyła. Odblokuj PIN-em opiekuna (pulpit → Start sesji).",
                 )
@@ -306,20 +310,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 heartRateLimits = heartRateLimits,
             )
             if (deviceClient.connectionState.value !is EhoMiniConnectionState.Connected) {
-                rehabEngine.start(includeWeight = includeWeight, plan = plan)
+                rehabEngine.start(includeWeight = includeWeight, plan = plan, ecgMode = ecgMode)
                 rehabEngine.setGateError("Połącz najpierw EHO-Mini (SPP).")
                 return@launch
             }
             val electrodes = runCatching { sessionController.refreshElectrodes() }
                 .getOrDefault(sessionController.electrodeStatus.value)
             if (!electrodes.allAttached) {
-                rehabEngine.start(includeWeight = includeWeight, plan = plan)
+                rehabEngine.start(includeWeight = includeWeight, plan = plan, ecgMode = ecgMode)
                 rehabEngine.setGateError(
                     "Nie można rozpocząć sesji — ${electrodes.summaryPl}",
                 )
                 return@launch
             }
-            rehabEngine.start(includeWeight = includeWeight, plan = plan)
+            rehabEngine.start(includeWeight = includeWeight, plan = plan, ecgMode = ecgMode)
             rehabEngine.beginBaselineEcg()
         }
     }

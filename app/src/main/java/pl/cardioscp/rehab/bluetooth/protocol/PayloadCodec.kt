@@ -127,4 +127,88 @@ object PayloadCodec {
         const val NO_SCP_FILE = 0x04
         const val LOOKBACK_UNAVAILABLE = 0x05
     }
+
+    /** ECG Online Info 0x0F — AVM (×10⁻⁹ V), liczba kanałów, kody SCP odprowadzeń. */
+    data class EcgOnlineInfo(
+        val avmNanoVolts: Int,
+        val channelCount: Int,
+        val leadCodes: IntArray,
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is EcgOnlineInfo) return false
+            return avmNanoVolts == other.avmNanoVolts &&
+                channelCount == other.channelCount &&
+                leadCodes.contentEquals(other.leadCodes)
+        }
+
+        override fun hashCode(): Int =
+            31 * (31 * avmNanoVolts + channelCount) + leadCodes.contentHashCode()
+    }
+
+    /** ECG Online Data 0x10 — numer pierwszej próbki + int16 interleaved. */
+    data class EcgOnlineData(
+        val firstSampleIndex: Int,
+        val samples: ShortArray,
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is EcgOnlineData) return false
+            return firstSampleIndex == other.firstSampleIndex && samples.contentEquals(other.samples)
+        }
+
+        override fun hashCode(): Int = 31 * firstSampleIndex + samples.contentHashCode()
+    }
+
+    fun parseEcgOnlineInfo(payload: ByteArray): EcgOnlineInfo {
+        require(payload.size >= 3) { "Online Info too short: ${payload.size}" }
+        val avm = (payload[0].toInt() and 0xFF) or ((payload[1].toInt() and 0xFF) shl 8)
+        val n = payload[2].toInt() and 0xFF
+        require(n > 0) { "Online Info: 0 channels" }
+        require(payload.size >= 3 + n) { "Online Info truncated for $n leads" }
+        val leads = IntArray(n) { i -> payload[3 + i].toInt() and 0xFF }
+        return EcgOnlineInfo(avmNanoVolts = avm, channelCount = n, leadCodes = leads)
+    }
+
+    fun parseEcgOnlineData(payload: ByteArray, channelCount: Int): EcgOnlineData {
+        require(channelCount > 0)
+        require(payload.size >= 2) { "Online Data too short" }
+        val first = (payload[0].toInt() and 0xFF) or ((payload[1].toInt() and 0xFF) shl 8)
+        val sampleBytes = payload.size - 2
+        require(sampleBytes % 2 == 0) { "Online Data odd sample byte length" }
+        require(sampleBytes % (2 * channelCount) == 0) {
+            "Online Data length not divisible by channel count"
+        }
+        val nShorts = sampleBytes / 2
+        val samples = ShortArray(nShorts)
+        var o = 2
+        for (i in 0 until nShorts) {
+            val lo = payload[o].toInt() and 0xFF
+            val hi = payload[o + 1].toInt() and 0xFF
+            samples[i] = ((hi shl 8) or lo).toShort()
+            o += 2
+        }
+        return EcgOnlineData(firstSampleIndex = first, samples = samples)
+    }
+
+    /** Etykieta odprowadzenia SCP (`scp.h`: I=1, II=2, V1=3…). */
+    fun scpLeadLabel(code: Int): String = when (code) {
+        ScpLead.I.toInt() and 0xFF -> "I"
+        ScpLead.II.toInt() and 0xFF -> "II"
+        ScpLead.V1.toInt() and 0xFF -> "V1"
+        4 -> "V2"
+        5 -> "V3"
+        6 -> "V4"
+        7 -> "V5"
+        8 -> "V6"
+        9 -> "III"
+        10 -> "aVR"
+        11 -> "aVL"
+        12 -> "aVF"
+        else -> "L$code"
+    }
+
+    /** int16 × AVM(×10⁻⁹ V) → mV. */
+    fun onlineSampleToMv(sample: Short, avmNanoVolts: Int): Double =
+        sample.toInt() * (avmNanoVolts.toDouble() * 1e-6)
 }

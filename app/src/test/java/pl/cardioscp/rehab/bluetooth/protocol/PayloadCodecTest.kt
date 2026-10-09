@@ -33,4 +33,23 @@ class PayloadCodecTest {
         assertEquals(6, marker.size)
         assertArrayEquals(marker, "SCPECG".toByteArray())
     }
+
+    @Test
+    fun ecgOnlineInfo_andData_parsePerSpec() {
+        val info = PayloadCodec.parseEcgOnlineInfo(
+            byteArrayOf(0xBC.toByte(), 0x1B, 0x02, 0x01, 0x02),
+        )
+        assertEquals(7100, info.avmNanoVolts)
+        assertEquals(2, info.channelCount)
+        assertArrayEquals(intArrayOf(1, 2), info.leadCodes)
+
+        val data = PayloadCodec.parseEcgOnlineData(
+            byteArrayOf(0x05, 0x00, 0x10, 0x00, 0x20, 0x00),
+            channelCount = 2,
+        )
+        assertEquals(5, data.firstSampleIndex)
+        assertEquals(2, data.samples.size)
+        assertEquals(16.toShort(), data.samples[0])
+        assertEquals(32.toShort(), data.samples[1])
+    }
 }

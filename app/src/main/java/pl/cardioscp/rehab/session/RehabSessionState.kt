@@ -58,6 +58,8 @@ data class TrainingLiveState(
 data class RehabSessionState(
     val step: RehabStep = RehabStep.INTRO,
     val includeWeight: Boolean = true,
+    /** Tryb EKG: Offline (SCP) lub Online (strumień + SCP). */
+    val ecgMode: EcgAcquisitionMode = EcgAcquisitionMode.OFFLINE,
     val trainingPlan: TrainingPlan = TrainingPlan(),
     val vitals: SessionVitals = SessionVitals(),
     val surveyAnswers: Map<String, Boolean> = emptyMap(),
@@ -68,6 +70,8 @@ data class RehabSessionState(
     val admissionRemainingSec: Int? = null,
     /** Tylko w [RehabStep.ECG_BASELINE]. */
     val baselineEcgPhase: BaselineEcgPhase? = null,
+    /** Podgląd EKG Online w trakcie zapisu (null / pusty w Offline). */
+    val liveEcg: LiveEcgSnapshot? = null,
     val busy: Boolean = false,
     val statusMessage: String? = null,
     val error: String? = null,

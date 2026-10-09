@@ -15,6 +15,17 @@ sealed interface ScenarioEvent {
 
         override fun hashCode(): Int = bytes.contentHashCode()
     }
+    /** Konfiguracja strumienia ECG Online (0x0F). */
+    data class EcgOnlineInfoEvent(val info: PayloadCodec.EcgOnlineInfo) : ScenarioEvent
+    /** Paczka próbek ECG Online (0x10), już w mV per kanał. */
+    data class EcgOnlineSamples(
+        val leadLabels: List<String>,
+        /** Kolejne próbki czasu; każdy wiersz = wartości mV dla leadLabels. */
+        val samplesMv: Array<DoubleArray>,
+        val firstSampleIndex: Int,
+    ) : ScenarioEvent
+    /** Urządzenie nie obsługuje ECG Online — kontynuujemy Offline/SCP. */
+    data object EcgOnlineUnsupported : ScenarioEvent
     data class Failed(val reason: String) : ScenarioEvent
     data object Finished : ScenarioEvent
 }
