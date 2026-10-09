@@ -20,9 +20,9 @@ data class TrainingPlan(
     val profile: SessionProfileKind = SessionProfileKind.INTERVAL,
     val cycles: Int = 2,
     /** Czas wysiłku [s]. */
-    val exerciseSec: Int = 15,
+    val exerciseSec: Int = 30,
     /** Czas odpoczynku [s] — startuje po zakończeniu EKG szczytowego. */
-    val restSec: Int = 15,
+    val restSec: Int = 30,
     /** Długość fragmentu EKG [s] (Offline: czas Offline; Online: wycinek taśmy). */
     val acquireSec: Int = 15,
     /** Automatyczne dopuszczenie po ankiecie [s]. */

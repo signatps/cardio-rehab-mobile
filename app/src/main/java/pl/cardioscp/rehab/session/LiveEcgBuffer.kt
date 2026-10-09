@@ -5,7 +5,7 @@ package pl.cardioscp.rehab.session
  */
 class LiveEcgBuffer(
     private val samplingHz: Int = 250,
-    private val windowSec: Float = 8f,
+    private val windowSec: Float = 15f,
 ) {
     private val capacity = (samplingHz * windowSec).toInt().coerceAtLeast(samplingHz)
     private val buffers = linkedMapOf<String, ArrayDeque<Double>>()

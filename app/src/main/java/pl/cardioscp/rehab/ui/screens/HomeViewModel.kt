@@ -303,8 +303,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
             val plan = TrainingPlan(
                 cycles = 2,
-                exerciseSec = 15,
-                restSec = 15,
+                exerciseSec = 30,
+                restSec = 30,
                 acquireSec = 15,
                 admissionWaitSec = 10,
                 heartRateLimits = heartRateLimits,

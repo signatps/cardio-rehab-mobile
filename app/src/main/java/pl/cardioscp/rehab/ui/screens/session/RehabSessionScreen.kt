@@ -179,6 +179,8 @@ fun RehabSessionScreen(
                     electrodes = electrodes,
                     ecgMode = state.ecgMode,
                     liveEcg = state.liveEcg,
+                    acquireRemainingSec = state.ecgAcquireRemainingSec,
+                    acquireTotalSec = state.trainingPlan.acquireSec,
                     onRetry = viewModel::beginBaselineEcg,
                 )
             }
@@ -893,9 +895,12 @@ private fun TrainingPhaseContent(
     }
     val timed = training.phase.kind == TrainingPhaseKind.EXERCISE ||
         training.phase.kind == TrainingPhaseKind.REST ||
-        visual == TrainingCoachVisual.STOP_BEFORE_PEAK_ECG
+        visual == TrainingCoachVisual.STOP_BEFORE_PEAK_ECG ||
+        visual == TrainingCoachVisual.HOLD_STILL_ECG
     val totalTimed = when (visual) {
-        TrainingCoachVisual.STOP_BEFORE_PEAK_ECG ->
+        TrainingCoachVisual.STOP_BEFORE_PEAK_ECG,
+        TrainingCoachVisual.HOLD_STILL_ECG,
+        ->
             (training.phaseElapsedSec + training.phaseRemainingSec).coerceAtLeast(1)
         else -> training.phase.durationSec.coerceAtLeast(1)
     }
@@ -1060,7 +1065,7 @@ private fun TrainingPhaseContent(
                                 liveEcg = liveEcg,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(160.dp),
+                                    .height(200.dp),
                             )
                         } else {
                             LinearProgressIndicator(
@@ -1111,6 +1116,8 @@ private fun EcgHoldStillPanel(
     electrodes: ElectrodeStatus,
     ecgMode: EcgAcquisitionMode,
     liveEcg: LiveEcgSnapshot?,
+    acquireRemainingSec: Int? = null,
+    acquireTotalSec: Int = 15,
     onRetry: () -> Unit,
 ) {
     val checking = phase == BaselineEcgPhase.ELECTRODE_CHECK
@@ -1166,10 +1173,22 @@ private fun EcgHoldStillPanel(
                 liveEcg = liveEcg,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp),
+                    .height(200.dp),
             )
         }
-        if (busy) {
+        if (!checking && acquireRemainingSec != null) {
+            val total = acquireTotalSec.coerceAtLeast(1)
+            val remain = acquireRemainingSec.coerceAtLeast(0)
+            LinearProgressIndicator(
+                progress = { ((total - remain).toFloat() / total).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(0.7f),
+            )
+            Text(
+                "Pozostało %d:%02d".format(remain / 60, remain % 60),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+        } else if (busy) {
             LinearProgressIndicator(
                 progress = { if (checking) 0.35f else 0f },
                 modifier = Modifier.fillMaxWidth(0.7f),

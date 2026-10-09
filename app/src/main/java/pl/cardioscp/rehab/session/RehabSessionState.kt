@@ -72,6 +72,8 @@ data class RehabSessionState(
     val baselineEcgPhase: BaselineEcgPhase? = null,
     /** Podgląd EKG Online w trakcie zapisu (null / pusty w Offline). */
     val liveEcg: LiveEcgSnapshot? = null,
+    /** Odliczanie zapisu EKG (kwalifikacyjne / spoczynek / szczyt), sekundy. */
+    val ecgAcquireRemainingSec: Int? = null,
     val busy: Boolean = false,
     val statusMessage: String? = null,
     val error: String? = null,

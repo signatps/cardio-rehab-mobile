@@ -147,7 +147,8 @@ class RehabSessionEngine(
                     baselineEcgPhase = BaselineEcgPhase.ACQUIRING,
                     busy = true,
                     error = null,
-                    statusMessage = "Pozostań nieruchomo — trwa zapis EKG",
+                    statusMessage = "Pozostań nieruchomo — trwa zapis EKG (${s.trainingPlan.acquireSec}s)",
+                    ecgAcquireRemainingSec = s.trainingPlan.acquireSec,
                 )
             }
             val result = acquireEcg(
@@ -615,6 +616,15 @@ class RehabSessionEngine(
             )
         }
         val plan = _state.value?.trainingPlan ?: TrainingPlan()
+        update {
+            val t = it.training
+            it.copy(
+                training = t?.copy(
+                    phaseElapsedSec = 0,
+                    phaseRemainingSec = plan.acquireSec,
+                ),
+            )
+        }
         val result = acquireEcg(label = label, totalSeconds = plan.acquireSec)
         result.fold(
             onSuccess = { rec ->
@@ -671,33 +681,72 @@ class RehabSessionEngine(
             val mode = _state.value?.ecgMode ?: EcgAcquisitionMode.OFFLINE
             val serial = (deviceClient.connectionState.value as? EhoMiniConnectionState.Connected)
                 ?.deviceName?.takeLast(6)
-            when (mode) {
-                EcgAcquisitionMode.ONLINE -> {
-                    ensureOnlineSessionRunning()
-                    update {
-                        it.copy(
-                            statusMessage = "$label: fragment Online (${totalSeconds}s)…",
-                            liveEcg = sessionController.liveEcg.value,
-                        )
+            val tickJob = scope.launch { tickEcgAcquireCountdown(totalSeconds) }
+            try {
+                when (mode) {
+                    EcgAcquisitionMode.ONLINE -> {
+                        ensureOnlineSessionRunning()
+                        update {
+                            it.copy(
+                                statusMessage = "$label: zapis Online ${totalSeconds}s…",
+                                liveEcg = sessionController.liveEcg.value,
+                                ecgAcquireRemainingSec = totalSeconds,
+                            )
+                        }
+                        val bytes = sessionController.captureOnlineFragment(totalSeconds)
+                        recordingStore.saveComplete(bytes, serial)
                     }
-                    val bytes = sessionController.captureOnlineFragment(totalSeconds)
-                    recordingStore.saveComplete(bytes, serial)
-                }
-                EcgAcquisitionMode.OFFLINE -> {
-                    update {
-                        it.copy(
-                            statusMessage = "$label: Init + EKG Offline (${totalSeconds}s)…",
-                            liveEcg = null,
-                        )
+                    EcgAcquisitionMode.OFFLINE -> {
+                        update {
+                            it.copy(
+                                statusMessage = "$label: zapis Offline ${totalSeconds}s…",
+                                liveEcg = null,
+                                ecgAcquireRemainingSec = totalSeconds,
+                            )
+                        }
+                        sessionController.runEcgOfflineCreate(userId, totalSeconds = totalSeconds)
+                        update { it.copy(statusMessage = "$label: pobieranie SCP…") }
+                        val bytes = sessionController.runScpDownload()
+                        recordingStore.saveComplete(bytes, serial)
                     }
-                    sessionController.runEcgOfflineCreate(userId, totalSeconds = totalSeconds)
-                    update { it.copy(statusMessage = "$label: pobieranie SCP…") }
-                    val bytes = sessionController.runScpDownload()
-                    recordingStore.saveComplete(bytes, serial)
                 }
+            } finally {
+                tickJob.cancel()
+                update { it.copy(ecgAcquireRemainingSec = null) }
             }
         }.recoverCatching { e ->
             throw IllegalStateException("$label: ${e.message}", e)
+        }
+    }
+
+    private suspend fun tickEcgAcquireCountdown(totalSeconds: Int) {
+        val total = totalSeconds.coerceAtLeast(1)
+        update {
+            val t = it.training
+            it.copy(
+                ecgAcquireRemainingSec = total,
+                training = t?.copy(
+                    acquiringEcg = true,
+                    phaseElapsedSec = 0,
+                    phaseRemainingSec = total,
+                ),
+            )
+        }
+        for (elapsed in 0 until total) {
+            if (abortTraining) break
+            delay(1_000)
+            val remain = (total - elapsed - 1).coerceAtLeast(0)
+            update {
+                val t = it.training
+                it.copy(
+                    ecgAcquireRemainingSec = remain,
+                    training = t?.copy(
+                        acquiringEcg = true,
+                        phaseElapsedSec = elapsed + 1,
+                        phaseRemainingSec = remain,
+                    ),
+                )
+            }
         }
     }
 
