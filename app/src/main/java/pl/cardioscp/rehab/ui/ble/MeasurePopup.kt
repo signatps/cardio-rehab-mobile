@@ -71,7 +71,8 @@ fun MeasurePopup(controller: BleMeasureController) {
         if (missing.isEmpty()) controller.onBlePermissionResult(true)
         else permissionLauncher.launch(missing)
     }
-    LaunchedEffect(controller.measurePopupOpen) {
+    // measureEpoch — wymusza skan przy przejściu BP→waga w sesji (open może zostać true).
+    LaunchedEffect(controller.measurePopupOpen, controller.measureEpoch) {
         if (controller.measurePopupOpen) controller.beginBleMeasure()
     }
     DisposableEffect(Unit) {

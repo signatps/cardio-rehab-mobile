@@ -32,6 +32,12 @@ class BleMeasureController(context: Context) {
         private set
     var measureType by mutableStateOf(VitalMeasureType.BLOOD_PRESSURE)
         private set
+    /**
+     * Monotoniczny licznik startu pomiaru — Compose musi odpalić skan także gdy
+     * popup przechodzi ciśnienie→waga w tym samym cyklu (open zostaje true).
+     */
+    var measureEpoch by mutableIntStateOf(0)
+        private set
     var pendingReading by mutableStateOf<VitalReading?>(null)
         private set
     var bleStatus by mutableStateOf("")
@@ -121,6 +127,7 @@ class BleMeasureController(context: Context) {
         }
         measurePopupOpen = true
         pendingBleAutoStart = true
+        measureEpoch += 1
         armBleWaitCountdown(BleWaitPhase.SCAN, kind)
     }
 
@@ -270,7 +277,9 @@ class BleMeasureController(context: Context) {
     }
 
     fun connectBle(hit: BleDeviceHit) {
-        val kind = hit.resolvedKind ?: VitalKindMapping.kindFor(measureType)
+        val mapped = hit.resolvedKind ?: VitalKindMapping.kindFor(measureType)
+        // Preferowane BDA wagi AUTO → konkretny model (JPD/iXellence bez GATT).
+        val kind = bdaStore.resolveConnectKind(mapped, hit.address)
         connectBleAddress(
             address = hit.address,
             kind = kind,
@@ -387,7 +396,11 @@ class BleMeasureController(context: Context) {
         val note = measureComment.trim()
         val cb = onSaved
         closeMeasurePopup()
-        cb?.invoke(reading, note)
+        // Następna klatka: sesja może od razu otworzyć kolejny pomiar (waga po BP)
+        // — Compose zobaczy zamknięcie popupu przed nowym startem.
+        if (cb != null) {
+            mainHandler.post { cb.invoke(reading, note) }
+        }
     }
 
     fun retryMeasurePopup() {
