@@ -49,7 +49,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import android.app.Activity
+import android.view.WindowManager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,6 +67,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -106,6 +110,18 @@ fun RehabSessionScreen(
     val session by viewModel.rehabSession.collectAsStateWithLifecycle()
     val electrodes by viewModel.electrodeStatus.collectAsStateWithLifecycle()
     val state = session
+    val context = LocalContext.current
+
+    // Blokuj wygaszacz przez całą aktywną sesję rehab.
+    DisposableEffect(state != null) {
+        val window = (context as? Activity)?.window
+        if (state != null) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
 
     Column(
         Modifier
@@ -904,6 +920,10 @@ private fun TrainingPhaseContent(
             (training.phaseElapsedSec + training.phaseRemainingSec).coerceAtLeast(1)
         else -> training.phase.durationSec.coerceAtLeast(1)
     }
+    val canToggleLiveEcg = training.phase.kind == TrainingPhaseKind.EXERCISE ||
+        training.phase.kind == TrainingPhaseKind.REST
+    // Domyślnie wyłączone; reset przy każdej fazie cyklu.
+    var showLiveEcg by remember(training.phase.index) { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxWidth()
@@ -922,6 +942,25 @@ private fun TrainingPhaseContent(
                 color = ProPlusColors.Muted,
                 modifier = Modifier.weight(1f),
             )
+            if (canToggleLiveEcg) {
+                FilterChip(
+                    selected = showLiveEcg,
+                    onClick = { showLiveEcg = !showLiveEcg },
+                    label = {
+                        Text(
+                            if (showLiveEcg) "Ukryj EKG" else "Pokaż EKG",
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Outlined.MonitorHeart,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    },
+                )
+            }
             OutlinedButton(
                 onClick = onComment,
                 modifier = Modifier.height(34.dp),
@@ -1075,6 +1114,23 @@ private fun TrainingPhaseContent(
                         }
                     }
                 }
+            }
+        }
+        if (canToggleLiveEcg && showLiveEcg) {
+            if (ecgMode == EcgAcquisitionMode.ONLINE) {
+                LiveEcgPreview(
+                    liveEcg = liveEcg,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                )
+            } else {
+                Text(
+                    "Podgląd EKG wymaga trybu Online.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ProPlusColors.Muted,
+                    textAlign = TextAlign.Center,
+                )
             }
         }
         if (training.pausedForEvent) {
