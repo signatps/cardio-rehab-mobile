@@ -349,55 +349,69 @@ private fun IntroContent(
             Checkbox(checked = includeWeight, onCheckedChange = { includeWeight = it })
             Text("Niewydolność serca — mierz także wagę")
         }
-        Text(
-            "Limity tętna",
-            style = MaterialTheme.typography.titleMedium,
-            color = ProPlusColors.Navy,
-        )
-        Text(
-            "Poniżej → PRZYSPIESZ, powyżej → ZWOLNIJ",
-            style = MaterialTheme.typography.bodySmall,
-            color = ProPlusColors.Muted,
-        )
-        defaults.indices.forEach { idx ->
-            HeartRateLimitStepper(
-                cycle = idx + 1,
-                minBpm = cycleMins[idx],
-                maxBpm = cycleMaxs[idx],
-                onMinChange = { v ->
-                    cycleMins = cycleMins.toMutableList().also { list ->
-                        list[idx] = v.coerceIn(40, (cycleMaxs[idx] - 1).coerceAtLeast(41))
-                    }
-                },
-                onMaxChange = { v ->
-                    cycleMaxs = cycleMaxs.toMutableList().also { list ->
-                        list[idx] = v.coerceIn((cycleMins[idx] + 1).coerceAtMost(219), 220)
-                    }
-                },
-            )
-        }
-        CoachArt(
-            resId = R.drawable.coach_nordic,
-            contentDescription = "Nordic walking",
-            size = 120.dp,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
-        Button(
-            onClick = {
-                val limits = defaults.indices.map { idx ->
-                    CycleHeartRateLimit(
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "Limity tętna",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = ProPlusColors.Navy,
+                )
+                Text(
+                    "Poniżej → PRZYSPIESZ, powyżej → ZWOLNIJ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = ProPlusColors.Muted,
+                )
+                defaults.indices.forEach { idx ->
+                    HeartRateLimitStepper(
                         cycle = idx + 1,
                         minBpm = cycleMins[idx],
                         maxBpm = cycleMaxs[idx],
+                        onMinChange = { v ->
+                            cycleMins = cycleMins.toMutableList().also { list ->
+                                list[idx] = v.coerceIn(40, (cycleMaxs[idx] - 1).coerceAtLeast(41))
+                            }
+                        },
+                        onMaxChange = { v ->
+                            cycleMaxs = cycleMaxs.toMutableList().also { list ->
+                                list[idx] = v.coerceIn((cycleMins[idx] + 1).coerceAtMost(219), 220)
+                            }
+                        },
                     )
                 }
-                onStart(includeWeight, limits)
-            },
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .widthIn(min = 160.dp, max = 220.dp),
-        ) {
-            Text("Rozpocznij sesję", style = MaterialTheme.typography.labelLarge)
+            }
+            Column(
+                Modifier.widthIn(min = 160.dp, max = 220.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CoachArt(
+                    resId = R.drawable.coach_nordic,
+                    contentDescription = "Nordic walking",
+                    size = 140.dp,
+                )
+                Button(
+                    onClick = {
+                        val limits = defaults.indices.map { idx ->
+                            CycleHeartRateLimit(
+                                cycle = idx + 1,
+                                minBpm = cycleMins[idx],
+                                maxBpm = cycleMaxs[idx],
+                            )
+                        }
+                        onStart(includeWeight, limits)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Rozpocznij sesję", style = MaterialTheme.typography.labelLarge)
+                }
+            }
         }
     }
 }
