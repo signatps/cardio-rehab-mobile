@@ -1050,9 +1050,10 @@ private fun TrainingPhaseContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                // Ludzik większy niż wcześniej (96) — elektrody nie dominują nad sylwetką.
                 ElectrodeMannequin(
                     status = electrodes,
-                    size = 96.dp,
+                    size = 168.dp,
                     showLegend = false,
                     showStatusPictogram = true,
                 )
@@ -1096,7 +1097,7 @@ private fun TrainingPhaseContent(
                             valueColor = valueColor,
                             zoneMin = lim?.minBpm?.toFloat(),
                             zoneMax = lim?.maxBpm?.toFloat(),
-                            diameter = 196.dp,
+                            diameter = 148.dp,
                         )
                         if (cueText != null) {
                             FlashingCoachBanner(
@@ -1143,7 +1144,7 @@ private fun TrainingPhaseContent(
                     liveEcg = liveEcg,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp),
+                        .height(148.dp),
                 )
             } else {
                 Text(

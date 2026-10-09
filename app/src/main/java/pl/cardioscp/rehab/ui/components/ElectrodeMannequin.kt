@@ -81,7 +81,9 @@ fun ElectrodeMannequin(
             val density = LocalDensity.current
             val boxW = constraints.maxWidth.toFloat()
             val boxH = constraints.maxHeight.toFloat()
-            val dot = 22.dp
+            // Kropki skalują się z ludzikiem — nie zasłaniają sylwetki przy większym manekinie.
+            val dot = (size * 0.11f).coerceIn(14.dp, 26.dp)
+            val labelSp = ((dot.value * 0.42f).coerceIn(7f, 11f)).sp
             ElectrodeAnchors.forEach { anchor ->
                 val contact = status.sites[anchor.site] ?: ElectrodeContact.UNKNOWN
                 val cx = boxW * anchor.x
@@ -91,6 +93,7 @@ fun ElectrodeMannequin(
                 ElectrodeDot(
                     site = anchor.site,
                     contact = contact,
+                    labelSize = labelSp,
                     modifier = Modifier
                         .offset(x = xDp, y = yDp)
                         .size(dot),
@@ -160,6 +163,7 @@ private fun ElectrodeDot(
     site: ElectrodeSite,
     contact: ElectrodeContact,
     modifier: Modifier = Modifier,
+    labelSize: androidx.compose.ui.unit.TextUnit = 8.sp,
 ) {
     val color = when (contact) {
         ElectrodeContact.ATTACHED -> ProPlusColors.ResultGood
@@ -175,7 +179,7 @@ private fun ElectrodeDot(
         Text(
             site.label,
             color = Color.White,
-            fontSize = 8.sp,
+            fontSize = labelSize,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
         )
