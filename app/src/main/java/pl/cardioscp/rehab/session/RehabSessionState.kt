@@ -19,6 +19,10 @@ data class SessionEcgEntry(
     val label: String,
     val recording: ScpRecording,
     val capturedAtMs: Long = System.currentTimeMillis(),
+    /** Tętno z zapisu: początkowe / średnie / końcowe (bpm). */
+    val hrStartBpm: Int? = null,
+    val hrAvgBpm: Int? = null,
+    val hrEndBpm: Int? = null,
 )
 
 data class SessionVitals(
@@ -41,6 +45,8 @@ data class TrainingLiveState(
     val heartRateLimit: CycleHeartRateLimit? = null,
     /** Cue coachingu tętna — steruje migającym napisem i TTS. */
     val heartRateCue: HeartRateCoachCue = HeartRateCoachCue.WAITING,
+    /** Duży piktogram + główny komunikat fazy. */
+    val coachVisual: TrainingCoachVisual? = null,
 )
 
 data class RehabSessionState(

@@ -88,11 +88,18 @@ class RehabSessionEngine(
             )
             result.fold(
                 onSuccess = { rec ->
+                    val trend = EcgHrTrendEngine.fromRecording(rec)
                     update {
                         it.copy(
                             busy = false,
-                            statusMessage = "Zapisano ${rec.displayName}",
-                            ecgEntries = it.ecgEntries + SessionEcgEntry("EKG kwalifikacyjne (przed sesją)", rec),
+                            statusMessage = "Zapisano EKG kwalifikacyjne",
+                            ecgEntries = it.ecgEntries + SessionEcgEntry(
+                                label = "EKG kwalifikacyjne (przed sesją)",
+                                recording = rec,
+                                hrStartBpm = trend.startBpm,
+                                hrAvgBpm = trend.avgBpm,
+                                hrEndBpm = trend.endBpm,
+                            ),
                             step = RehabStep.VITALS_BP,
                         )
                     }
@@ -249,21 +256,27 @@ class RehabSessionEngine(
                         phaseElapsedSec = 0,
                         phaseRemainingSec = phase.durationSec,
                         message = phase.label,
-                        acquiringEcg = phase.kind == TrainingPhaseKind.ECG_REST_START ||
-                            phase.kind == TrainingPhaseKind.ECG_PEAK,
+                        acquiringEcg = false,
                         measuringPulse = phase.kind == TrainingPhaseKind.EXERCISE ||
                             phase.kind == TrainingPhaseKind.REST,
+                        coachVisual = when (phase.kind) {
+                            TrainingPhaseKind.EXERCISE -> TrainingCoachVisual.EXERCISE
+                            TrainingPhaseKind.REST -> TrainingCoachVisual.REST
+                            TrainingPhaseKind.ECG_PEAK -> TrainingCoachVisual.STOP_BEFORE_PEAK_ECG
+                            TrainingPhaseKind.ECG_REST_START -> TrainingCoachVisual.HOLD_STILL_ECG
+                        },
                     ),
                     statusMessage = phase.label,
-                    busy = phase.kind == TrainingPhaseKind.ECG_REST_START ||
-                        phase.kind == TrainingPhaseKind.ECG_PEAK,
+                    busy = false,
                 )
             }
             when (phase.kind) {
-                TrainingPhaseKind.ECG_REST_START,
-                TrainingPhaseKind.ECG_PEAK,
-                -> {
-                    runEcgSlot(phase.label)
+                TrainingPhaseKind.ECG_REST_START -> {
+                    runEcgSlot(phase.label, holdStill = true)
+                }
+                TrainingPhaseKind.ECG_PEAK -> {
+                    runPrePeakStopCue()
+                    runEcgSlot(phase.label, holdStill = true)
                 }
                 TrainingPhaseKind.EXERCISE -> {
                     val limit = _state.value?.trainingPlan?.limitForCycle(phase.cycle)
@@ -306,6 +319,7 @@ class RehabSessionEngine(
                             pulseBpm = bpm,
                             heartRateLimit = limit,
                             heartRateCue = cue,
+                            coachVisual = TrainingCoachVisual.EXERCISE,
                             message = buildExerciseMessage(phase, bpm, limit, cue),
                         ),
                     )
@@ -340,6 +354,7 @@ class RehabSessionEngine(
                         measuringPulse = true,
                         heartRateLimit = limit,
                         heartRateCue = cue,
+                        coachVisual = TrainingCoachVisual.EXERCISE,
                         message = buildExerciseMessage(phase, t.pulseBpm, limit, cue),
                     ),
                 )
@@ -389,7 +404,8 @@ class RehabSessionEngine(
                             measuringPulse = true,
                             heartRateLimit = null,
                             heartRateCue = HeartRateCoachCue.WAITING,
-                            message = "${phase.label} · $pulsePart",
+                            coachVisual = TrainingCoachVisual.REST,
+                            message = "Odpoczynek · $pulsePart",
                         ),
                     )
                 }
@@ -417,7 +433,8 @@ class RehabSessionEngine(
                         measuringPulse = true,
                         acquiringEcg = false,
                         pausedForEvent = false,
-                        message = "${phase.label} · $pulsePart",
+                        coachVisual = TrainingCoachVisual.REST,
+                        message = "Odpoczynek · $pulsePart",
                     ),
                 )
             }
@@ -453,7 +470,31 @@ class RehabSessionEngine(
         }
     }
 
-    private suspend fun runEcgSlot(label: String) {
+    /** Komunikat „Przerwij ćwiczenie” tuż przed EKG szczytowym. */
+    private suspend fun runPrePeakStopCue() {
+        val holdSec = (_state.value?.trainingPlan?.prePeakStopSec ?: 3).coerceIn(1, 10)
+        for (elapsed in 0 until holdSec) {
+            if (skipCurrentPhase || abortTraining) break
+            update {
+                val t = it.training ?: return@update it
+                it.copy(
+                    busy = false,
+                    training = t.copy(
+                        acquiringEcg = false,
+                        measuringPulse = false,
+                        coachVisual = TrainingCoachVisual.STOP_BEFORE_PEAK_ECG,
+                        message = "Przerwij ćwiczenie",
+                        phaseElapsedSec = elapsed + 1,
+                        phaseRemainingSec = (holdSec - elapsed - 1).coerceAtLeast(0),
+                    ),
+                    statusMessage = "Przerwij ćwiczenie — zaraz zapis EKG",
+                )
+            }
+            delay(1_000)
+        }
+    }
+
+    private suspend fun runEcgSlot(label: String, holdStill: Boolean) {
         update {
             val t = it.training
             it.copy(
@@ -461,20 +502,32 @@ class RehabSessionEngine(
                 training = t?.copy(
                     acquiringEcg = true,
                     measuringPulse = false,
-                    message = label,
+                    coachVisual = if (holdStill) {
+                        TrainingCoachVisual.HOLD_STILL_ECG
+                    } else {
+                        t.coachVisual
+                    },
+                    message = "Pozostań nieruchomo — trwa zapis EKG",
                 ),
-                statusMessage = "Init → EKG Offline ($label) → pobieranie SCP…",
+                statusMessage = "Pozostań nieruchomo — trwa zapis EKG",
             )
         }
         val plan = _state.value?.trainingPlan ?: TrainingPlan()
         val result = acquireEcg(label = label, totalSeconds = plan.acquireSec)
         result.fold(
             onSuccess = { rec ->
+                val trend = EcgHrTrendEngine.fromRecording(rec)
                 update {
                     val t = it.training
                     it.copy(
                         busy = false,
-                        ecgEntries = it.ecgEntries + SessionEcgEntry(label, rec),
+                        ecgEntries = it.ecgEntries + SessionEcgEntry(
+                            label = label,
+                            recording = rec,
+                            hrStartBpm = trend.startBpm,
+                            hrAvgBpm = trend.avgBpm,
+                            hrEndBpm = trend.endBpm,
+                        ),
                         training = t?.copy(acquiringEcg = false),
                         statusMessage = "Zapisano $label",
                         error = null,

@@ -16,6 +16,13 @@ data class TrainingPlan(
     val admissionWaitSec: Int = 10,
     /** Limity tętna per cykl (min–max). Brak wpisu = brak coachingu w cyklu. */
     val heartRateLimits: List<CycleHeartRateLimit> = HeartRateCoach.defaultLimits(2),
+    /**
+     * Rodzaj ćwiczenia (docelowo z platformy).
+     * Domyślnie Nordic walking.
+     */
+    val exerciseKind: ExerciseKind = ExerciseKind.NORDIC_WALKING,
+    /** Krótka pauza przed EKG szczytowym z komunikatem „Przerwij ćwiczenie” [s]. */
+    val prePeakStopSec: Int = 3,
 ) {
     init {
         require(cycles >= 1)

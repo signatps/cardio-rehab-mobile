@@ -1,7 +1,9 @@
 package pl.cardioscp.rehab.ui.screens.session
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -40,7 +41,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,20 +52,30 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import pl.cardioscp.rehab.R
 import pl.cardioscp.rehab.session.CycleHeartRateLimit
 import pl.cardioscp.rehab.session.DefaultRehabSurvey
+import pl.cardioscp.rehab.session.EcgHrTrend
+import pl.cardioscp.rehab.session.EcgHrTrendEngine
+import pl.cardioscp.rehab.session.ExerciseKind
 import pl.cardioscp.rehab.session.HeartRateCoach
 import pl.cardioscp.rehab.session.HeartRateCoachCue
 import pl.cardioscp.rehab.session.HeartRateValueTone
 import pl.cardioscp.rehab.session.RehabStep
+import pl.cardioscp.rehab.session.TrainingCoachVisual
 import pl.cardioscp.rehab.session.TrainingPhaseKind
 import pl.cardioscp.rehab.ui.ble.MeasurePopup
 import pl.cardioscp.rehab.ui.components.AnalogGauge
@@ -226,164 +236,15 @@ fun RehabSessionScreen(
                 if (t == null) {
                     Text("Przygotowanie treningu…")
                 } else {
-                    Text(t.phase.label, style = MaterialTheme.typography.headlineSmall, color = ProPlusColors.Navy)
-                    Text(
-                        when (t.phase.kind) {
-                            TrainingPhaseKind.ECG_REST_START -> "Akwizycja EKG spoczynkowego"
-                            TrainingPhaseKind.EXERCISE -> "Ćwicz — pomiar tętna z EHO-Mini"
-                            TrainingPhaseKind.ECG_PEAK -> "Akwizycja EKG w szczycie wysiłku"
-                            TrainingPhaseKind.REST -> "Odpoczynek — tętno z EHO-Mini"
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
+                    TrainingPhaseContent(
+                        training = t,
+                        exerciseKind = state.trainingPlan.exerciseKind,
+                        onSpeakCue = viewModel::speakHeartRateCue,
+                        onComment = viewModel::reportEcgEvent,
+                        onConfirmEndExercise = { viewModel.confirmEcgEvent(endTraining = false) },
+                        onConfirmEndTraining = { viewModel.confirmEcgEvent(endTraining = true) },
+                        onDismissEvent = viewModel::dismissEcgEvent,
                     )
-                    Spacer(Modifier.height(8.dp))
-                    // Odpoczynek: samo tętno liczbą (bez wskaźnika analogowego / coachingu).
-                    if (t.phase.kind == TrainingPhaseKind.REST && t.measuringPulse) {
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                "Tętno",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = ProPlusColors.Muted,
-                            )
-                            Text(
-                                t.pulseBpm?.takeIf { it > 0 }?.toString() ?: "—",
-                                style = MaterialTheme.typography.displayMedium,
-                                color = ProPlusColors.Navy,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                "bpm",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = ProPlusColors.Muted,
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    // Wskaźnik + coaching tylko w fazie wysiłku przy pomiarze tętna.
-                    if (t.phase.kind == TrainingPhaseKind.EXERCISE && t.measuringPulse) {
-                        val lim = t.heartRateLimit
-                        val tone = HeartRateCoach.valueTone(t.pulseBpm, lim)
-                        val valueColor = when (tone) {
-                            HeartRateValueTone.IN_ZONE -> ProPlusColors.ResultGood
-                            HeartRateValueTone.NEAR_EDGE -> ProPlusColors.ResultWatch
-                            HeartRateValueTone.OUT_OF_ZONE -> ProPlusColors.ResultAlert
-                            HeartRateValueTone.WAITING -> ProPlusColors.Muted
-                        }
-                        val cueText = HeartRateCoach.screenText(t.heartRateCue)
-                        if (cueText != null) {
-                            LaunchedEffect(t.heartRateCue, t.phase.index) {
-                                while (true) {
-                                    HeartRateCoach.speakText(t.heartRateCue)?.let { phrase ->
-                                        viewModel.speakHeartRateCue(phrase)
-                                    }
-                                    delay(4_000)
-                                }
-                            }
-                        }
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                lim?.let {
-                                    Text(
-                                        "Cel cyklu ${it.cycle}: ${it.minBpm}–${it.maxBpm} bpm",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = ProPlusColors.Navy,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                    Spacer(Modifier.height(6.dp))
-                                }
-                                AnalogGauge(
-                                    value = t.pulseBpm?.takeIf { it > 0 }?.toFloat(),
-                                    minValue = 40f,
-                                    maxValue = 180f,
-                                    label = if (t.pulseBpm != null && t.pulseBpm > 0) {
-                                        "Tętno z EKG"
-                                    } else {
-                                        "Oczekiwanie na tętno…"
-                                    },
-                                    unit = "bpm",
-                                    valueColor = valueColor,
-                                    zoneMin = lim?.minBpm?.toFloat(),
-                                    zoneMax = lim?.maxBpm?.toFloat(),
-                                    diameter = 182.dp,
-                                )
-                                if (cueText != null) {
-                                    Spacer(Modifier.height(10.dp))
-                                    FlashingCoachBanner(
-                                        text = cueText,
-                                        accent = when (t.heartRateCue) {
-                                            HeartRateCoachCue.SPEED_UP -> CoachBannerColors.speedUp
-                                            else -> CoachBannerColors.slowDown
-                                        },
-                                        modifier = Modifier.widthIn(max = 320.dp),
-                                    )
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    val total = t.phase.durationSec.coerceAtLeast(1)
-                    if (t.phase.kind == TrainingPhaseKind.EXERCISE ||
-                        t.phase.kind == TrainingPhaseKind.REST
-                    ) {
-                        LinearProgressIndicator(
-                            progress = { t.phaseElapsedSec.toFloat() / total },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text(
-                            "Pozostało %d:%02d".format(
-                                t.phaseRemainingSec / 60,
-                                t.phaseRemainingSec % 60,
-                            ),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    if (t.acquiringEcg) {
-                        Spacer(Modifier.height(8.dp))
-                        Text("Init → Offline → pobieranie SCP…", color = ProPlusColors.Navy)
-                        LinearProgressIndicator(
-                            progress = { 0f },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    if (t.message.isNotBlank()) {
-                        Text(t.message, style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        OutlinedButton(
-                            onClick = viewModel::reportEcgEvent,
-                            modifier = Modifier.widthIn(min = 200.dp, max = 280.dp),
-                        ) {
-                            Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Komentarz pacjenta")
-                        }
-                    }
-                    if (t.pausedForEvent) {
-                        Spacer(Modifier.height(8.dp))
-                        if (t.phase.kind == TrainingPhaseKind.EXERCISE) {
-                            Button(
-                                onClick = { viewModel.confirmEcgEvent(endTraining = false) },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text("Zakończ wysiłek (dalej EKG szczyt)") }
-                        }
-                        Button(
-                            onClick = { viewModel.confirmEcgEvent(endTraining = true) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Zakończ trening") }
-                        TextButton(onClick = viewModel::dismissEcgEvent) { Text("Kontynuuj fazę") }
-                    }
                 }
             }
             RehabStep.SUMMARY -> SummaryContent(
@@ -759,6 +620,194 @@ private fun SurveyAnswerChip(
 }
 
 @Composable
+private fun TrainingPhaseContent(
+    training: pl.cardioscp.rehab.session.TrainingLiveState,
+    exerciseKind: ExerciseKind,
+    onSpeakCue: (String) -> Unit,
+    onComment: () -> Unit,
+    onConfirmEndExercise: () -> Unit,
+    onConfirmEndTraining: () -> Unit,
+    onDismissEvent: () -> Unit,
+) {
+    val visual = training.coachVisual
+        ?: when (training.phase.kind) {
+            TrainingPhaseKind.EXERCISE -> TrainingCoachVisual.EXERCISE
+            TrainingPhaseKind.REST -> TrainingCoachVisual.REST
+            TrainingPhaseKind.ECG_PEAK ->
+                if (training.acquiringEcg) TrainingCoachVisual.HOLD_STILL_ECG
+                else TrainingCoachVisual.STOP_BEFORE_PEAK_ECG
+            TrainingPhaseKind.ECG_REST_START -> TrainingCoachVisual.HOLD_STILL_ECG
+        }
+    val headline = when (visual) {
+        TrainingCoachVisual.EXERCISE -> "Ćwicz"
+        TrainingCoachVisual.STOP_BEFORE_PEAK_ECG -> "Przerwij ćwiczenie"
+        TrainingCoachVisual.HOLD_STILL_ECG -> "Pozostań nieruchomo — trwa zapis EKG"
+        TrainingCoachVisual.REST -> "Odpoczynek"
+    }
+    val pictogramRes = when (visual) {
+        TrainingCoachVisual.EXERCISE -> when (exerciseKind) {
+            ExerciseKind.NORDIC_WALKING -> R.drawable.ic_nordic_walking
+        }
+        TrainingCoachVisual.STOP_BEFORE_PEAK_ECG,
+        TrainingCoachVisual.HOLD_STILL_ECG,
+        -> R.drawable.ic_person_halt
+        TrainingCoachVisual.REST -> R.drawable.ic_rest_sit
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            training.phase.label,
+            style = MaterialTheme.typography.labelLarge,
+            color = ProPlusColors.Muted,
+        )
+        Icon(
+            painter = painterResource(pictogramRes),
+            contentDescription = headline,
+            tint = Color.Unspecified,
+            modifier = Modifier.size(132.dp),
+        )
+        if (visual == TrainingCoachVisual.EXERCISE) {
+            Text(
+                exerciseKind.displayNamePl,
+                style = MaterialTheme.typography.titleMedium,
+                color = ProPlusColors.Accent,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Text(
+            headline,
+            style = MaterialTheme.typography.headlineSmall,
+            color = when (visual) {
+                TrainingCoachVisual.STOP_BEFORE_PEAK_ECG -> ProPlusColors.ResultAlert
+                TrainingCoachVisual.HOLD_STILL_ECG -> ProPlusColors.Navy
+                TrainingCoachVisual.REST -> ProPlusColors.Accent
+                TrainingCoachVisual.EXERCISE -> ProPlusColors.Navy
+            },
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        when {
+            visual == TrainingCoachVisual.EXERCISE && training.measuringPulse -> {
+                val lim = training.heartRateLimit
+                val tone = HeartRateCoach.valueTone(training.pulseBpm, lim)
+                val valueColor = when (tone) {
+                    HeartRateValueTone.IN_ZONE -> ProPlusColors.ResultGood
+                    HeartRateValueTone.NEAR_EDGE -> ProPlusColors.ResultWatch
+                    HeartRateValueTone.OUT_OF_ZONE -> ProPlusColors.ResultAlert
+                    HeartRateValueTone.WAITING -> ProPlusColors.Muted
+                }
+                val cueText = HeartRateCoach.screenText(training.heartRateCue)
+                if (cueText != null) {
+                    LaunchedEffect(training.heartRateCue, training.phase.index) {
+                        while (true) {
+                            HeartRateCoach.speakText(training.heartRateCue)?.let(onSpeakCue)
+                            delay(4_000)
+                        }
+                    }
+                }
+                lim?.let {
+                    Text(
+                        "Cel cyklu ${it.cycle}: ${it.minBpm}–${it.maxBpm} bpm",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = ProPlusColors.Navy,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                AnalogGauge(
+                    value = training.pulseBpm?.takeIf { it > 0 }?.toFloat(),
+                    minValue = 40f,
+                    maxValue = 180f,
+                    label = if (training.pulseBpm != null && training.pulseBpm > 0) {
+                        "Tętno z EKG"
+                    } else {
+                        "Oczekiwanie na tętno…"
+                    },
+                    unit = "bpm",
+                    valueColor = valueColor,
+                    zoneMin = lim?.minBpm?.toFloat(),
+                    zoneMax = lim?.maxBpm?.toFloat(),
+                    diameter = 160.dp,
+                )
+                if (cueText != null) {
+                    FlashingCoachBanner(
+                        text = cueText,
+                        accent = when (training.heartRateCue) {
+                            HeartRateCoachCue.SPEED_UP -> CoachBannerColors.speedUp
+                            else -> CoachBannerColors.slowDown
+                        },
+                        modifier = Modifier.widthIn(max = 320.dp),
+                    )
+                }
+            }
+            visual == TrainingCoachVisual.REST && training.measuringPulse -> {
+                Text(
+                    training.pulseBpm?.takeIf { it > 0 }?.toString() ?: "—",
+                    style = MaterialTheme.typography.displayMedium,
+                    color = ProPlusColors.Navy,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text("bpm", style = MaterialTheme.typography.titleMedium, color = ProPlusColors.Muted)
+            }
+            visual == TrainingCoachVisual.HOLD_STILL_ECG -> {
+                LinearProgressIndicator(
+                    progress = { 0f },
+                    modifier = Modifier.fillMaxWidth(0.7f),
+                )
+            }
+        }
+        val timed = training.phase.kind == TrainingPhaseKind.EXERCISE ||
+            training.phase.kind == TrainingPhaseKind.REST ||
+            visual == TrainingCoachVisual.STOP_BEFORE_PEAK_ECG
+        if (timed) {
+            val total = when (visual) {
+                TrainingCoachVisual.STOP_BEFORE_PEAK_ECG ->
+                    (training.phaseElapsedSec + training.phaseRemainingSec).coerceAtLeast(1)
+                else -> training.phase.durationSec.coerceAtLeast(1)
+            }
+            LinearProgressIndicator(
+                progress = { training.phaseElapsedSec.toFloat() / total },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "Pozostało %d:%02d".format(
+                    training.phaseRemainingSec / 60,
+                    training.phaseRemainingSec % 60,
+                ),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        OutlinedButton(
+            onClick = onComment,
+            modifier = Modifier.widthIn(min = 200.dp, max = 280.dp),
+        ) {
+            Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Komentarz pacjenta")
+        }
+        if (training.pausedForEvent) {
+            if (training.phase.kind == TrainingPhaseKind.EXERCISE) {
+                Button(
+                    onClick = onConfirmEndExercise,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Zakończ wysiłek (dalej EKG szczyt)") }
+            }
+            Button(
+                onClick = onConfirmEndTraining,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Zakończ trening") }
+            TextButton(onClick = onDismissEvent) { Text("Kontynuuj fazę") }
+        }
+    }
+}
+
+@Composable
 private fun SummaryContent(
     state: pl.cardioscp.rehab.session.RehabSessionState,
     onOpenEcg: (pl.cardioscp.rehab.session.SessionEcgEntry) -> Unit,
@@ -783,22 +832,154 @@ private fun SummaryContent(
         val survey = DefaultRehabSurvey.evaluate(state.surveyAnswers)
         Text("Ankieta: $survey")
         HorizontalDivider()
-        Text("Badania EKG z sesji (${state.ecgEntries.size})", fontWeight = FontWeight.SemiBold)
+        Text(
+            "Tętno w zapisach EKG (${state.ecgEntries.size})",
+            fontWeight = FontWeight.SemiBold,
+            color = ProPlusColors.Navy,
+        )
         if (state.ecgEntries.isEmpty()) {
-            Text("Brak zapisanych EKG w tej sesji.")
+            Text("Brak zapisanych EKG w tej sesji.", color = ProPlusColors.Muted)
         } else {
             state.ecgEntries.forEach { entry ->
-                OutlinedButton(
-                    onClick = { onOpenEcg(entry) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("${entry.label} · ${entry.recording.displayName}", maxLines = 2)
+                val trend = remember(entry.recording.file.absolutePath, entry.hrAvgBpm) {
+                    if (entry.hrAvgBpm != null || entry.hrStartBpm != null) {
+                        EcgHrTrend(entry.hrStartBpm, entry.hrAvgBpm, entry.hrEndBpm)
+                    } else {
+                        EcgHrTrendEngine.fromRecording(entry.recording)
+                    }
                 }
+                EcgHrTrendCard(
+                    title = EcgHrTrendEngine.shortLabel(entry.label),
+                    trend = trend,
+                    onClick = { onOpenEcg(entry) },
+                )
             }
         }
         Spacer(Modifier.height(8.dp))
         Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
             Text("Zakończ")
+        }
+    }
+}
+
+@Composable
+private fun EcgHrTrendCard(
+    title: String,
+    trend: EcgHrTrend,
+    onClick: () -> Unit,
+) {
+    Surface(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, ProPlusColors.Line),
+        color = ProPlusColors.Surface,
+    ) {
+        Column(
+            Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = ProPlusColors.Navy,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                HrStat("Pocz.", trend.startBpm)
+                HrStat("Śr.", trend.avgBpm, emphasize = true)
+                HrStat("Końc.", trend.endBpm)
+            }
+            EcgHrMiniChart(
+                start = trend.startBpm,
+                avg = trend.avgBpm,
+                end = trend.endBpm,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(96.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun HrStat(label: String, bpm: Int?, emphasize: Boolean = false) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = ProPlusColors.Muted)
+        Text(
+            bpm?.toString() ?: "—",
+            style = if (emphasize) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = ProPlusColors.Navy,
+        )
+        Text("bpm", style = MaterialTheme.typography.labelSmall, color = ProPlusColors.Muted)
+    }
+}
+
+@Composable
+private fun EcgHrMiniChart(
+    start: Int?,
+    avg: Int?,
+    end: Int?,
+    modifier: Modifier = Modifier,
+) {
+    val values = listOf(start, avg, end)
+    val present = values.mapNotNull { it }
+    if (present.isEmpty()) {
+        Box(modifier, contentAlignment = Alignment.Center) {
+            Text("Brak danych tętna", color = ProPlusColors.Muted)
+        }
+        return
+    }
+    val minY = (present.minOrNull()!! - 8).coerceAtLeast(40)
+    val maxY = (present.maxOrNull()!! + 8).coerceAtMost(220)
+    val span = (maxY - minY).coerceAtLeast(1).toFloat()
+    val lineColor = ProPlusColors.Accent
+    val gridColor = ProPlusColors.Line
+    Canvas(modifier) {
+        val padL = 8.dp.toPx()
+        val padR = 8.dp.toPx()
+        val padT = 10.dp.toPx()
+        val padB = 18.dp.toPx()
+        val w = size.width - padL - padR
+        val h = size.height - padT - padB
+        val xs = listOf(0.1f, 0.5f, 0.9f).map { padL + it * w }
+        // grid
+        for (i in 0..2) {
+            val y = padT + h * i / 2f
+            drawLine(
+                color = gridColor,
+                start = Offset(padL, y),
+                end = Offset(padL + w, y),
+                strokeWidth = 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)),
+            )
+        }
+        val pts = values.mapIndexedNotNull { i, v ->
+            v?.let {
+                val y = padT + h * (1f - (it - minY) / span)
+                Offset(xs[i], y)
+            }
+        }
+        if (pts.size >= 2) {
+            for (i in 0 until pts.lastIndex) {
+                drawLine(
+                    color = lineColor,
+                    start = pts[i],
+                    end = pts[i + 1],
+                    strokeWidth = 3.dp.toPx(),
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
+        pts.forEach { p ->
+            drawCircle(color = lineColor, radius = 5.dp.toPx(), center = p)
+            drawCircle(color = Color.White, radius = 2.5.dp.toPx(), center = p, style = Stroke(width = 0f))
+            drawCircle(color = Color.White, radius = 2.5.dp.toPx(), center = p)
         }
     }
 }
