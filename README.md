@@ -16,7 +16,7 @@ Po splashu wybór roli + PIN (demo):
 | Adam Testowski | Pacjent | `2222` |
 | Admin Adminowy | Admin | `9999` |
 
-- **Pacjent** — pulpit (leki + sesja rehab), sesje, plan dnia, pomiary (ciśnienie/waga + wyniki), leki, choroby, sesja rehab, urządzenie (tylko połączenie EKG). Bez menu EKG.
+- **Pacjent** — pulpit (leki + sesja rehab), sesje, pomiary (ciśnienie/waga + wyniki), leki, choroby, sesja rehab, urządzenie (tylko połączenie EKG). Bez menu EKG i bez osobnego „Planu dnia” (dubluje pulpit/leki/sesje).
 - **Lekarz** — lista pacjentów, kalendarz/status sesji, przegląd wyników tylko z sesji rehab.
 - **Admin** — pełna aplikacja jak dotychczas.
 
@@ -24,7 +24,7 @@ Po splashu wybór roli + PIN (demo):
 
 Działa połączenie **Bluetooth Classic SPP** z `PRO_PLUS_ECG_******` oraz **BLE** do ciśnienia/wagi (port z mobile-DSD).
 
-UI w stylu **CardioSCP / mobile-DSD**: lewe menu + prawa ramka treści, kalendarz sesji, plan dnia, leki, choroby, pomiary (demo lokalne). **Leki** — wyszukiwanie w zaszytym katalogu **RPL (MZ)** (`assets/rpl_medications.json.gz`, jak w DSD-mobile), opcjonalne odświeżenie z APK, usuwanie pozycji. **Choroby** — katalog **ICD-10 PL + ICD-9 NFZ** (`assets/icd_pl.json.gz`), filtry ICD-9/10, opcjonalna aktualizacja z sieci. **Plan dnia** — aktualna data kalendarzowa, rollover o północy (nowe dawki + nowa sesja), przełącznik lista / kalendarz godzin. **Leki** — potwierdzanie jak w DSD-mobile: Przyjęte / Pominięte (słownik powodów) / Później (przesunięcie terminu). Na pulpicie **powitanie głosowe** (TTS): imię + plan leków i sesji rehab; po wykonanej sesji przypomina tylko o lekach.
+UI w stylu **CardioSCP / mobile-DSD**: lewe menu + prawa ramka treści, kalendarz sesji, leki, choroby, pomiary (demo lokalne). **Leki** — wyszukiwanie w zaszytym katalogu **RPL (MZ)** (`assets/rpl_medications.json.gz`, jak w DSD-mobile), opcjonalne odświeżenie z APK, usuwanie pozycji. **Choroby** — katalog **ICD-10 PL + ICD-9 NFZ** (`assets/icd_pl.json.gz`), filtry ICD-9/10, opcjonalna aktualizacja z sieci. **Plan dnia** (tylko Admin) — aktualna data kalendarzowa, rollover o północy, przełącznik lista / kalendarz godzin. **Leki** — potwierdzanie jak w DSD-mobile: Przyjęte / Pominięte (słownik powodów) / Później (przesunięcie terminu). Na pulpicie **powitanie głosowe** (TTS): imię + plan leków i sesji rehab; po wykonanej sesji przypomina tylko o lekach.
 
 **Sesja rehabilitacji** (po SPP): EKG spoczynkowe → ciśnienie BLE → waga BLE (gdy HF) → ankieta kwalifikacyjna → trening → skala Borga → podsumowanie.
 

@@ -314,20 +314,23 @@ fun DashboardScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedButton(
-                onClick = onOpenDayPlan,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(40.dp),
-                contentPadding = ButtonDefaults.ContentPadding,
-            ) {
-                Icon(
-                    Icons.Outlined.CalendarViewDay,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.size(6.dp))
-                Text("Pełny plan", style = MaterialTheme.typography.labelLarge)
+            // Pacjent: Plan dnia dubluje pulpit/leki/sesje — bez skrótu „Pełny plan”.
+            if (!patientHomeMode) {
+                OutlinedButton(
+                    onClick = onOpenDayPlan,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(40.dp),
+                    contentPadding = ButtonDefaults.ContentPadding,
+                ) {
+                    Icon(
+                        Icons.Outlined.CalendarViewDay,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.size(6.dp))
+                    Text("Pełny plan", style = MaterialTheme.typography.labelLarge)
+                }
             }
             Button(
                 onClick = onOpenRehab,

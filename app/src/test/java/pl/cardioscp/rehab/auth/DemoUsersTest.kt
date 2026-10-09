@@ -22,6 +22,7 @@ class DemoUsersTest {
         val visible = AppDestination.visibleFor(AppRole.PATIENT)
         assertEquals(false, AppDestination.ECG in visible)
         assertEquals(false, AppDestination.PATIENTS in visible)
+        assertEquals(false, AppDestination.DAY_PLAN in visible)
         assertEquals(true, AppDestination.DASHBOARD in visible)
         assertEquals(true, AppDestination.REHAB in visible)
         assertEquals(true, AppDestination.DEVICE in visible)

@@ -37,7 +37,6 @@ enum class AppDestination(
             AppRole.PATIENT -> listOf(
                 DASHBOARD,
                 SESSIONS,
-                DAY_PLAN,
                 MEASUREMENTS,
                 MEDS,
                 DISEASES,
