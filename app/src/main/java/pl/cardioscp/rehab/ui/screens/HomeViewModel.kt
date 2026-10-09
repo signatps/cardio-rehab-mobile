@@ -34,8 +34,10 @@ import pl.cardioscp.rehab.session.ArchivedRehabSession
 import pl.cardioscp.rehab.session.RehabSessionArchive
 import pl.cardioscp.rehab.session.RehabSessionEngine
 import pl.cardioscp.rehab.session.RehabSessionState
+import pl.cardioscp.rehab.session.SessionDayGate
 import pl.cardioscp.rehab.session.SessionEcgEntry
 import pl.cardioscp.rehab.session.TrainingPlan
+import java.time.LocalDate
 
 data class HomeUiState(
     val connection: EhoMiniConnectionState = EhoMiniConnectionState.Idle,
@@ -59,8 +61,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val clinic: StateFlow<ClinicSnapshot> = _clinic
 
     private val sessionArchive = RehabSessionArchive(application, recordingStore)
+    private val sessionDayGate = SessionDayGate(application)
     private val _archivedSessions = MutableStateFlow<List<ArchivedRehabSession>>(emptyList())
     val archivedSessions: StateFlow<List<ArchivedRehabSession>> = _archivedSessions
+
+    private val _showRehabPinDialog = MutableStateFlow(false)
+    val showRehabPinDialog: StateFlow<Boolean> = _showRehabPinDialog
+    private var pendingRehabOpen: (() -> Unit)? = null
+    private var pendingExtraViaPin = false
 
     private var dayPlanWelcomeSpoken = false
     private val voiceGreeting
@@ -230,12 +238,65 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         MedReminderScheduler.reschedule(application, clinicStore)
     }
 
+    /** Wejście w sesję rehab — przy zużytym slocie dnia pokazuje PIN. */
+    fun requestOpenRehab(open: () -> Unit) {
+        publishClinic()
+        val day = LocalDate.now()
+        val slotUsed = clinicStore.isTodayRehabSlotUsed(day) || hasArchivedSessionToday(day)
+        if (sessionDayGate.requiresPinForNewSession(day, slotUsed)) {
+            pendingRehabOpen = open
+            _showRehabPinDialog.value = true
+            return
+        }
+        pendingExtraViaPin = sessionDayGate.isExtraGranted(day)
+        open()
+    }
+
+    fun dismissRehabPinDialog() {
+        _showRehabPinDialog.value = false
+        pendingRehabOpen = null
+    }
+
+    fun submitRehabPin(pin: String): Boolean {
+        if (pin != sessionDayGate.defaultPin()) return false
+        val day = LocalDate.now()
+        sessionDayGate.grantExtraSession(day)
+        clinicStore.scheduleExtraRehabSessionAfterPin(day)
+        publishClinic()
+        pendingExtraViaPin = true
+        _showRehabPinDialog.value = false
+        val open = pendingRehabOpen
+        pendingRehabOpen = null
+        open?.invoke()
+        return true
+    }
+
+    private fun hasArchivedSessionToday(day: LocalDate): Boolean {
+        val zone = java.time.ZoneId.systemDefault()
+        return _archivedSessions.value.any {
+            java.time.Instant.ofEpochMilli(it.startedAtMs).atZone(zone).toLocalDate() == day
+        }
+    }
+
     fun startRehabSession(
         includeWeight: Boolean = true,
         heartRateLimits: List<pl.cardioscp.rehab.session.CycleHeartRateLimit> =
             pl.cardioscp.rehab.session.HeartRateCoach.defaultLimits(2),
     ) {
         viewModelScope.launch {
+            val day = LocalDate.now()
+            val slotUsed = clinicStore.isTodayRehabSlotUsed(day) || hasArchivedSessionToday(day)
+            if (sessionDayGate.requiresPinForNewSession(day, slotUsed)) {
+                rehabEngine.start(includeWeight = includeWeight, plan = TrainingPlan())
+                rehabEngine.setGateError(
+                    "Dziś sesja już się odbyła. Odblokuj PIN-em opiekuna (pulpit → Start sesji).",
+                )
+                return@launch
+            }
+            if (pendingExtraViaPin || sessionDayGate.isExtraGranted(day)) {
+                sessionDayGate.markExtraSessionStarted(day)
+                pendingExtraViaPin = true
+            }
             val plan = TrainingPlan(
                 cycles = 2,
                 exerciseSec = 15,
@@ -262,6 +323,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             rehabEngine.beginBaselineEcg()
         }
     }
+
+    fun confirmStartTraining() = rehabEngine.confirmStartTraining()
 
     fun refreshElectrodes() {
         viewModelScope.launch {
@@ -480,6 +543,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     /** Po zakończonej sesji rehab — archiwum EKG + plan dnia bez sesji. */
     fun markTodayRehabSessionDone() {
         val live = rehabEngine.state.value
+        val disqualified = live?.step == pl.cardioscp.rehab.session.RehabStep.SUMMARY &&
+            live.statusMessage?.contains("dyskwalifik", ignoreCase = true) == true
         if (live != null && live.ecgEntries.isNotEmpty()) {
             val surveyOutcome = pl.cardioscp.rehab.session.DefaultRehabSurvey.evaluate(live.surveyAnswers)
             sessionArchive.archiveFromLiveSession(
@@ -494,10 +559,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 },
                 surveyAnswers = live.surveyAnswers,
                 cycleHrSummaries = live.cycleHrSummaries,
+                extraViaPin = pendingExtraViaPin || sessionDayGate.isCurrentStartExtra(),
             )
             refreshEcgArchive()
         }
-        clinicStore.markTodayRehabSessionDone()
+        if (disqualified ||
+            live?.let {
+                pl.cardioscp.rehab.session.DefaultRehabSurvey.evaluate(it.surveyAnswers) ==
+                    pl.cardioscp.rehab.session.SurveyOutcome.DISQUALIFIED
+            } == true
+        ) {
+            clinicStore.markTodayRehabSessionDisqualified()
+        } else {
+            clinicStore.markTodayRehabSessionDone()
+        }
+        pendingExtraViaPin = false
         publishClinic()
     }
 
@@ -524,7 +600,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun skipWeight() = rehabEngine.skipWeight()
     fun answerSurvey(questionId: String, yes: Boolean) = rehabEngine.answerSurvey(questionId, yes)
     fun submitSurvey() = rehabEngine.submitSurvey()
-    fun finishDisqualified() = rehabEngine.finishDisqualified()
+    fun finishDisqualified() {
+        rehabEngine.finishDisqualified()
+    }
     fun reportEcgEvent() = rehabEngine.reportEcgEvent()
     fun confirmEcgEvent(endTraining: Boolean) = rehabEngine.confirmEventAction(endTraining)
     fun dismissEcgEvent() = rehabEngine.dismissEventPause()

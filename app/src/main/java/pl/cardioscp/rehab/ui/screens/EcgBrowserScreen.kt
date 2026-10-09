@@ -135,6 +135,7 @@ fun EcgBrowserScreen(viewModel: HomeViewModel) {
                             SessionNumberPictogram(
                                 number = session.sessionNumber,
                                 selected = session.id == selectedSession?.id,
+                                extraViaPin = session.extraViaPin,
                                 onClick = { selectedSessionId = session.id },
                             )
                         }
@@ -213,6 +214,7 @@ fun EcgBrowserScreen(viewModel: HomeViewModel) {
 private fun SessionNumberPictogram(
     number: Int,
     selected: Boolean,
+    extraViaPin: Boolean,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -224,12 +226,22 @@ private fun SessionNumberPictogram(
         border = BorderStroke(1.dp, if (selected) ProPlusColors.Accent else ProPlusColors.Line),
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Text(
-                "S$number",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (selected) ProPlusColors.Surface else ProPlusColors.Navy,
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "S$number",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (selected) ProPlusColors.Surface else ProPlusColors.Navy,
+                )
+                if (extraViaPin) {
+                    Text(
+                        "PIN",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (selected) ProPlusColors.Ice else ProPlusColors.ResultWatch,
+                    )
+                }
+            }
         }
     }
 }

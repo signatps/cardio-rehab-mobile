@@ -33,6 +33,8 @@ data class ArchivedRehabSession(
     val surveyAnswers: Map<String, Boolean> = emptyMap(),
     /** Limity tętna per cykl po treningu. */
     val cycleHrSummaries: List<CycleHrSummary> = emptyList(),
+    /** Sesja dodatkowa tego samego dnia po PIN opiekuna. */
+    val extraViaPin: Boolean = false,
 )
 
 /** Archiwum sesji rehab z listą zapisanych EKG (zakładka EKG). */
@@ -62,13 +64,18 @@ class RehabSessionArchive(
         surveyPassed: Boolean? = null,
         surveyAnswers: Map<String, Boolean> = emptyMap(),
         cycleHrSummaries: List<CycleHrSummary> = emptyList(),
+        extraViaPin: Boolean = false,
     ): ArchivedRehabSession? {
         if (entries.isEmpty()) return null
         val nextNum = (sessions.maxOfOrNull { it.sessionNumber } ?: 0) + 1
         val archived = ArchivedRehabSession(
             id = UUID.randomUUID().toString(),
             sessionNumber = nextNum,
-            title = title,
+            title = if (extraViaPin && !title.contains("PIN", ignoreCase = true)) {
+                "$title · dodatkowa (PIN)"
+            } else {
+                title
+            },
             startedAtMs = startedAtMs,
             ecgs = entries.map { e ->
                 ArchivedEcgSlot(
@@ -83,6 +90,7 @@ class RehabSessionArchive(
             surveyPassed = surveyPassed,
             surveyAnswers = surveyAnswers,
             cycleHrSummaries = cycleHrSummaries.sortedBy { it.cycle },
+            extraViaPin = extraViaPin,
         )
         sessions = sessions + archived
         persist()
@@ -182,6 +190,7 @@ class RehabSessionArchive(
                     .put("bloodPressureSummary", s.bloodPressureSummary)
                     .put("weightSummary", s.weightSummary)
                     .put("surveyPassed", s.surveyPassed)
+                    .put("extraViaPin", s.extraViaPin)
                     .put(
                         "surveyAnswers",
                         JSONObject().also { ans ->
@@ -290,6 +299,7 @@ class RehabSessionArchive(
                             surveyPassed = surveyPassed,
                             surveyAnswers = surveyAnswers,
                             cycleHrSummaries = cycleHr,
+                            extraViaPin = o.optBoolean("extraViaPin", false),
                         ),
                     )
                 }

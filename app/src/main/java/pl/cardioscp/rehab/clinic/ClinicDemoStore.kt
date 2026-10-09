@@ -213,25 +213,67 @@ class ClinicDemoStore(context: Context) {
     }
 
     fun markTodayRehabSessionDone() {
+        markTodayRehabSessionOutcome(PlannedSessionStatus.DONE)
+    }
+
+    fun markTodayRehabSessionDisqualified() {
+        markTodayRehabSessionOutcome(PlannedSessionStatus.DISQUALIFIED)
+    }
+
+    private fun markTodayRehabSessionOutcome(status: PlannedSessionStatus) {
         val day = calendarToday()
         val now = System.currentTimeMillis()
-        ensureTodayRehabSession(day)
-        sessions = sessions.map {
-            if (it.date == day &&
+        ensureTodayRehabSession(day, force = true)
+        val scheduled = sessions.filter {
+            it.date == day &&
                 it.kind == PlannedSessionKind.REHAB_INTERVAL &&
                 it.status == PlannedSessionStatus.SCHEDULED
-            ) {
-                it.copy(status = PlannedSessionStatus.DONE, completedAtMs = now)
-            } else {
-                it
+        }
+        sessions = if (scheduled.isNotEmpty()) {
+            val targetId = scheduled.maxByOrNull { it.time }!!.id
+            sessions.map {
+                if (it.id == targetId) it.copy(status = status, completedAtMs = now) else it
             }
+        } else {
+            sessions
         }
         persist()
     }
 
-    /** Po północy — zaplanuj sesję rehab na dziś, jeśli brak. */
-    private fun ensureTodayRehabSession(day: LocalDate) {
+    /** Czy slot dzienny jest już zużyty (DONE / DISQUALIFIED / CANCELLED / MISSED). */
+    fun isTodayRehabSlotUsed(day: LocalDate = calendarToday()): Boolean {
+        ensureTodayRehabSession(day)
+        return sessions.any {
+            it.date == day &&
+                it.kind == PlannedSessionKind.REHAB_INTERVAL &&
+                it.status != PlannedSessionStatus.SCHEDULED
+        }
+    }
+
+    /**
+     * Po PIN — dodaj kolejną zaplanowaną sesję na dziś (historia / kalendarz).
+     * Zwraca id nowej pozycji.
+     */
+    fun scheduleExtraRehabSessionAfterPin(day: LocalDate = calendarToday()): PlannedSession {
+        val extra = PlannedSession(
+            id = "s-$day-pin-${System.currentTimeMillis()}",
+            date = day,
+            time = LocalTime.now().withSecond(0).withNano(0),
+            kind = PlannedSessionKind.REHAB_INTERVAL,
+            title = "Trening sekwencyjny · dodatkowa (PIN)",
+            status = PlannedSessionStatus.SCHEDULED,
+        )
+        sessions = sessions + extra
+        persist()
+        return extra
+    }
+
+    /** Po północy — zaplanuj sesję rehab na dziś, jeśli brak (domyślnie dni robocze). */
+    private fun ensureTodayRehabSession(day: LocalDate, force: Boolean = false) {
         if (sessions.any { it.date == day && it.kind == PlannedSessionKind.REHAB_INTERVAL }) return
+        val weekday = day.dayOfWeek != java.time.DayOfWeek.SATURDAY &&
+            day.dayOfWeek != java.time.DayOfWeek.SUNDAY
+        if (!force && !weekday) return
         sessions = sessions + PlannedSession(
             id = "s-$day",
             date = day,

@@ -18,6 +18,7 @@ import pl.cardioscp.rehab.ui.screens.HomeScreen
 import pl.cardioscp.rehab.ui.screens.HomeViewModel
 import pl.cardioscp.rehab.ui.screens.RecordingsScreen
 import pl.cardioscp.rehab.ui.ble.MeasurePopup
+import pl.cardioscp.rehab.ui.components.RehabPinDialog
 import pl.cardioscp.rehab.ui.screens.clinic.DashboardScreen
 import pl.cardioscp.rehab.ui.screens.clinic.DayPlanScreen
 import pl.cardioscp.rehab.ui.screens.clinic.DiseasesScreen
@@ -46,6 +47,7 @@ fun CardioRehabNavHost(
     val viewerError by viewModel.viewerError.collectAsStateWithLifecycle()
     val viewerTitle by viewModel.viewerTitle.collectAsStateWithLifecycle()
     val openViewerRequest by viewModel.openViewerRequest.collectAsStateWithLifecycle()
+    val showRehabPin by viewModel.showRehabPinDialog.collectAsStateWithLifecycle()
 
     LaunchedEffect(openViewerRequest) {
         if (openViewerRequest > 0) {
@@ -53,6 +55,13 @@ fun CardioRehabNavHost(
                 launchSingleTop = true
             }
         }
+    }
+
+    if (showRehabPin) {
+        RehabPinDialog(
+            onDismiss = viewModel::dismissRehabPinDialog,
+            onSubmit = viewModel::submitRehabPin,
+        )
     }
 
     NavHost(navController = navController, startDestination = Routes.SPLASH) {
@@ -90,7 +99,11 @@ fun CardioRehabNavHost(
                             todaySession = viewModel.todayArchivedSession(),
                             alertCount = viewModel.dashboardAlertCount(),
                             electrodes = electrodes,
-                            onOpenRehab = { destination = AppDestination.REHAB.name },
+                            onOpenRehab = {
+                                viewModel.requestOpenRehab {
+                                    destination = AppDestination.REHAB.name
+                                }
+                            },
                             onOpenDayPlan = { destination = AppDestination.DAY_PLAN.name },
                             onOpenMeds = { destination = AppDestination.MEDS.name },
                             onOpenAlerts = { destination = AppDestination.MEDS.name },
@@ -102,7 +115,11 @@ fun CardioRehabNavHost(
                     }
                     AppDestination.SESSIONS -> SessionsCalendarScreen(
                         clinic = clinic,
-                        onStartRehab = { destination = AppDestination.REHAB.name },
+                        onStartRehab = {
+                            viewModel.requestOpenRehab {
+                                destination = AppDestination.REHAB.name
+                            }
+                        },
                     )
                     AppDestination.DAY_PLAN -> DayPlanScreen(clinic = clinic)
                     AppDestination.MEASUREMENTS -> MeasurementsScreen(clinic = clinic)
@@ -133,7 +150,11 @@ fun CardioRehabNavHost(
                             viewModel.refreshEcgArchive()
                             destination = AppDestination.ECG.name
                         },
-                        onOpenRehabSession = { destination = AppDestination.REHAB.name },
+                        onOpenRehabSession = {
+                            viewModel.requestOpenRehab {
+                                destination = AppDestination.REHAB.name
+                            }
+                        },
                     )
                     AppDestination.ECG -> EcgBrowserScreen(viewModel = viewModel)
                 }

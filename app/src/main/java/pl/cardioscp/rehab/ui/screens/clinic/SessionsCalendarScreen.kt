@@ -196,7 +196,12 @@ fun SessionsCalendarScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                         Text(
-                            statusLabel(s.status),
+                            buildString {
+                                append(statusLabel(s.status))
+                                if (s.title.contains("PIN", ignoreCase = true)) {
+                                    append(" · PIN")
+                                }
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = when (s.status) {
                                 PlannedSessionStatus.DONE -> ProPlusColors.ResultGood

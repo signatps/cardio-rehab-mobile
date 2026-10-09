@@ -238,34 +238,27 @@ class RehabSessionEngine(
                     statusMessage = "Ankieta dyskwalifikuje z treningu — skontaktuj się z opiekunem.",
                 )
             }
-            SurveyOutcome.PASS -> startAdmissionWait()
+            SurveyOutcome.PASS -> showReadyToStartTraining()
         }
     }
 
-    private fun startAdmissionWait() {
-        val waitSec = _state.value?.trainingPlan?.admissionWaitSec ?: 10
+    /** Po kwalifikacji + pomiarach + ankiecie — decyzja użytkownika o starcie treningu. */
+    private fun showReadyToStartTraining() {
+        admissionJob?.cancel()
         update {
             it.copy(
                 step = RehabStep.ADMISSION_WAIT,
                 error = null,
-                admissionRemainingSec = waitSec,
-                statusMessage = "Oczekiwanie na dopuszczenie do treningu…",
+                admissionRemainingSec = null,
+                statusMessage = "Kwalifikacja zakończona — naciśnij Rozpocznij sesję, gdy będziesz gotowy.",
             )
         }
-        admissionJob?.cancel()
-        admissionJob = scope.launch {
-            for (left in waitSec downTo 1) {
-                update {
-                    it.copy(
-                        admissionRemainingSec = left,
-                        statusMessage = "Dopuszczenie za ${left}s…",
-                    )
-                }
-                delay(1_000)
-            }
-            update { it.copy(admissionRemainingSec = 0, statusMessage = "Dopuszczono — start treningu") }
-            startTraining()
-        }
+    }
+
+    fun confirmStartTraining() {
+        val s = _state.value ?: return
+        if (s.step != RehabStep.ADMISSION_WAIT) return
+        startTraining()
     }
 
     fun finishDisqualified() {

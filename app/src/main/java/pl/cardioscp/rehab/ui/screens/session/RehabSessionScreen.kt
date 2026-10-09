@@ -253,35 +253,33 @@ fun RehabSessionScreen(
                 }
             }
             RehabStep.ADMISSION_WAIT -> {
-                val left = state.admissionRemainingSec ?: 0
                 Column(
                     Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     CoachArt(
                         resId = R.drawable.coach_wait,
-                        contentDescription = "Dopuszczenie do treningu",
+                        contentDescription = "Gotowość do treningu",
                         size = 150.dp,
                     )
                     Text(
-                        "Ankieta zaliczona. Oczekiwanie na dopuszczenie do treningu…",
+                        "Kwalifikacja, pomiary i ankieta zakończone.",
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
                     )
                     Text(
-                        "%d s".format(left),
-                        style = MaterialTheme.typography.displaySmall,
-                        color = ProPlusColors.Navy,
-                        fontWeight = FontWeight.Bold,
+                        "Rozpocznij sesję treningową, gdy będziesz gotowy.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = ProPlusColors.Muted,
+                        textAlign = TextAlign.Center,
                     )
-                    LinearProgressIndicator(
-                        progress = {
-                            val total = state.trainingPlan.admissionWaitSec.coerceAtLeast(1)
-                            1f - left.toFloat() / total
-                        },
-                        modifier = Modifier.fillMaxWidth(0.7f),
-                    )
+                    Button(
+                        onClick = viewModel::confirmStartTraining,
+                        modifier = Modifier.widthIn(min = 220.dp, max = 320.dp),
+                    ) {
+                        Text("Rozpocznij sesję", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
             RehabStep.TRAINING -> {
@@ -328,7 +326,7 @@ private fun StepHeader(step: RehabStep) {
         RehabStep.VITALS_WEIGHT -> "2b. Waga"
         RehabStep.SURVEY -> "3. Ankieta"
         RehabStep.SURVEY_DISQUALIFIED -> "Ankieta — dyskwalifikacja"
-        RehabStep.ADMISSION_WAIT -> "4. Dopuszczenie"
+        RehabStep.ADMISSION_WAIT -> "4. Start treningu"
         RehabStep.TRAINING -> "5. Trening sekwencyjny"
         RehabStep.SUMMARY -> "6. Podsumowanie"
     }
@@ -456,7 +454,7 @@ private fun SessionTimelineStrip(includeWeight: Boolean) {
         TimelineStep(Icons.Outlined.MonitorHeart, "BP", "Ciśnienie"),
         TimelineStep(Icons.Outlined.MonitorWeight, "kg", "Waga", enabled = includeWeight),
         TimelineStep(Icons.Outlined.Assignment, "A", "Ankieta"),
-        TimelineStep(Icons.Outlined.HourglassBottom, "10s", "Dopuszczenie"),
+        TimelineStep(Icons.Outlined.HourglassBottom, "▶", "Start treningu"),
         TimelineStep(Icons.AutoMirrored.Outlined.DirectionsRun, "T", "Trening"),
         TimelineStep(Icons.Outlined.Summarize, "Σ", "Podsumowanie"),
     )
