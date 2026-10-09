@@ -946,8 +946,10 @@ private fun TrainingPhaseContent(
     }
     val canToggleLiveEcg = training.phase.kind == TrainingPhaseKind.EXERCISE ||
         training.phase.kind == TrainingPhaseKind.REST
-    // Domyślnie wyłączone; reset przy każdej fazie cyklu.
-    var showLiveEcg by remember(training.phase.index) { mutableStateOf(false) }
+    // Online: domyślnie pokaż przebieg (EcgPaper); Offline zostaje ukryty.
+    var showLiveEcg by remember(training.phase.index, ecgMode) {
+        mutableStateOf(ecgMode == EcgAcquisitionMode.ONLINE)
+    }
     Column(
         Modifier
             .fillMaxWidth()
