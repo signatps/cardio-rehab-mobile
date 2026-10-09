@@ -21,8 +21,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Bloodtype
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.MonitorWeight
+import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -96,6 +98,8 @@ fun MeasurePopup(controller: BleMeasureController) {
     val icon = when (controller.measureType) {
         VitalMeasureType.BLOOD_PRESSURE -> Icons.Outlined.FavoriteBorder
         VitalMeasureType.WEIGHT -> Icons.Outlined.MonitorWeight
+        VitalMeasureType.SPO2 -> Icons.Outlined.Bloodtype
+        VitalMeasureType.GLUCOSE -> Icons.Outlined.WaterDrop
     }
 
     Dialog(
@@ -227,6 +231,8 @@ fun MeasurePopup(controller: BleMeasureController) {
                             when (controller.measureType) {
                                 VitalMeasureType.BLOOD_PRESSURE -> "Symuluj wynik ciśnienia"
                                 VitalMeasureType.WEIGHT -> "Symuluj wynik wagi"
+                                VitalMeasureType.SPO2 -> "Symuluj wynik saturacji"
+                                VitalMeasureType.GLUCOSE -> "Symuluj wynik glikemii"
                             },
                         )
                     }

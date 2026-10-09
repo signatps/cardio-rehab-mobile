@@ -19,6 +19,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,6 +63,7 @@ fun SessionsCalendarScreen(
     onStartRehab: () -> Unit,
     canStartRehab: Boolean = true,
     subtitle: String? = null,
+    onBack: (() -> Unit)? = null,
 ) {
     var month by remember { mutableStateOf(YearMonth.now()) }
     var selected by remember { mutableStateOf(LocalDate.now()) }
@@ -74,7 +79,27 @@ fun SessionsCalendarScreen(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Kalendarz sesji", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = "Wróć do listy pacjentów",
+                        tint = ProPlusColors.Navy,
+                    )
+                }
+            }
+            Text(
+                "Kalendarz sesji",
+                style = MaterialTheme.typography.headlineMedium,
+                color = ProPlusColors.Navy,
+                modifier = Modifier.weight(1f),
+            )
+        }
         subtitle?.let {
             Text(
                 it,

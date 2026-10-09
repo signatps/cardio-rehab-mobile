@@ -151,15 +151,31 @@ fun CardioRehabNavHost(
                 },
             ) {
                 when (current) {
-                    AppDestination.PATIENTS -> PatientsListScreen(
-                        rows = viewModel.doctorPatientRows(),
-                        selectedPatientId = selectedPatientId,
-                        onSelect = viewModel::selectDoctorPatient,
-                        onOpenCalendar = {
-                            viewModel.selectDoctorPatient(it)
-                            destination = AppDestination.SESSIONS.name
-                        },
-                    )
+                    AppDestination.PATIENTS -> {
+                        var showPatientSessions by rememberSaveable {
+                            mutableStateOf(false)
+                        }
+                        if (showPatientSessions) {
+                            val sessionsClinic = viewModel.doctorClinicForSelected()
+                            SessionsCalendarScreen(
+                                clinic = sessionsClinic,
+                                canStartRehab = false,
+                                subtitle = "Pacjent: ${sessionsClinic.patientName}",
+                                onBack = { showPatientSessions = false },
+                                onStartRehab = {},
+                            )
+                        } else {
+                            PatientsListScreen(
+                                rows = viewModel.doctorPatientRows(),
+                                selectedPatientId = selectedPatientId,
+                                onSelect = viewModel::selectDoctorPatient,
+                                onOpenCalendar = { patientId ->
+                                    viewModel.selectDoctorPatient(patientId)
+                                    showPatientSessions = true
+                                },
+                            )
+                        }
+                    }
                     AppDestination.DASHBOARD -> {
                         val electrodes by viewModel.electrodeStatus.collectAsStateWithLifecycle()
                         DashboardScreen(
@@ -215,6 +231,8 @@ fun CardioRehabNavHost(
                                     mode = MeasurementsMode.PATIENT,
                                     onMeasureBp = viewModel::measureBpStandalone,
                                     onMeasureWeight = viewModel::measureWeightStandalone,
+                                    onMeasureSpo2 = viewModel::measureSpo2Standalone,
+                                    onMeasureGlycemia = viewModel::measureGlycemiaStandalone,
                                 )
                                 MeasurePopup(controller = viewModel.bleMeasure)
                             }

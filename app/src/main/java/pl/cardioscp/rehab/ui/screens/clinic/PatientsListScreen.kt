@@ -11,9 +11,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +25,8 @@ import pl.cardioscp.rehab.auth.RosterPatient
 import pl.cardioscp.rehab.clinic.PlannedSession
 import pl.cardioscp.rehab.clinic.PlannedSessionKind
 import pl.cardioscp.rehab.clinic.PlannedSessionStatus
+import pl.cardioscp.rehab.session.SessionSchemeProgress
+import pl.cardioscp.rehab.ui.components.SessionSchemeStatusRow
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -35,6 +34,7 @@ import java.time.format.DateTimeFormatter
 data class DoctorPatientRow(
     val patient: RosterPatient,
     val todayRehab: PlannedSession?,
+    val schemeProgress: SessionSchemeProgress = SessionSchemeProgress.empty(),
 )
 
 @Composable
@@ -58,7 +58,7 @@ fun PatientsListScreen(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            "Wybierz pacjenta, aby zobaczyć kalendarz i wyniki sesji rehab.",
+            "Kliknij pacjenta, aby otworzyć szczegóły sesji (kalendarz jak w menu Sesje).",
             style = MaterialTheme.typography.bodyMedium,
             color = ProPlusColors.Muted,
         )
@@ -81,52 +81,50 @@ fun PatientsListScreen(
                 ),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Row(
+                Column(
                     Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(
-                        Icons.Outlined.Person,
-                        contentDescription = null,
-                        tint = ProPlusColors.Accent,
-                    )
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            row.patient.displayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = ProPlusColors.Navy,
-                            fontWeight = FontWeight.SemiBold,
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Outlined.Person,
+                            contentDescription = null,
+                            tint = ProPlusColors.Accent,
                         )
-                        val rehab = row.todayRehab
-                        if (rehab == null) {
+                        Column(Modifier.weight(1f)) {
                             Text(
-                                "Dziś brak sesji rehab",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = ProPlusColors.Muted,
-                            )
-                        } else {
-                            Text(
-                                "Dziś ${rehab.time.format(timeFmt)} · ${statusLabel(rehab.status)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = statusColor(rehab.status),
+                                row.patient.displayName,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = ProPlusColors.Navy,
                                 fontWeight = FontWeight.SemiBold,
                             )
+                            val rehab = row.todayRehab
+                            if (rehab == null) {
+                                Text(
+                                    "Dziś brak sesji rehab",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = ProPlusColors.Muted,
+                                )
+                            } else {
+                                Text(
+                                    "Dziś ${rehab.time.format(timeFmt)} · ${statusLabel(rehab.status)}" +
+                                        " · ${row.schemeProgress.doneCount}/${row.schemeProgress.plannedCount}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = statusColor(rehab.status),
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
                         }
                     }
-                    Icon(
-                        if (row.todayRehab?.status == PlannedSessionStatus.DONE) {
-                            Icons.Outlined.CheckCircle
-                        } else if (row.todayRehab != null) {
-                            Icons.Outlined.HourglassBottom
-                        } else {
-                            Icons.Outlined.CalendarMonth
-                        },
-                        contentDescription = null,
-                        tint = statusColor(row.todayRehab?.status),
-                    )
+                    if (row.todayRehab != null) {
+                        SessionSchemeStatusRow(progress = row.schemeProgress)
+                    }
                 }
             }
         }

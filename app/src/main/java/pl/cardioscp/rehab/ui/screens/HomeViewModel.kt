@@ -42,8 +42,10 @@ import pl.cardioscp.rehab.session.RehabSessionEngine
 import pl.cardioscp.rehab.session.RehabSessionState
 import pl.cardioscp.rehab.session.SessionDayGate
 import pl.cardioscp.rehab.session.SessionEcgEntry
+import pl.cardioscp.rehab.session.SessionSchemeProgress
 import pl.cardioscp.rehab.session.TrainingPlan
 import java.time.LocalDate
+import java.time.ZoneId
 
 data class HomeUiState(
     val connection: EhoMiniConnectionState = EhoMiniConnectionState.Idle,
@@ -289,15 +291,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun doctorPatientRows(): List<DoctorPatientRow> {
         val today = LocalDate.now()
         val local = clinicStore.snapshot()
+        val todayArchive = todayArchivedSession()
         return DoctorRoster.patients.map { p ->
             val sessions = if (p.usesLocalClinic) {
                 local.sessions
             } else {
                 DoctorRoster.seedSessions(p.id, today)
             }
+            val todayRehab = todayRehabSession(sessions, today)
+            val archive = if (p.usesLocalClinic) todayArchive else null
             DoctorPatientRow(
                 patient = p,
-                todayRehab = todayRehabSession(sessions, today),
+                todayRehab = todayRehab,
+                schemeProgress = SessionSchemeProgress.fromArchive(
+                    archive = archive,
+                    status = todayRehab?.status,
+                    includeWeight = true,
+                ),
             )
         }
     }
@@ -471,6 +481,36 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 recordClinicMeasurement(
                     VitalKind.WEIGHT,
                     "Masa",
+                    reading.summary,
+                    note = note,
+                )
+            },
+        )
+    }
+
+    /** Saturacja SpO₂ (menu Pomiary pacjenta). */
+    fun measureSpo2Standalone() {
+        bleMeasure.startMeasure(
+            type = pl.cardioscp.rehab.ble.VitalMeasureType.SPO2,
+            onSaved = { reading, note ->
+                recordClinicMeasurement(
+                    VitalKind.SPO2,
+                    "Saturacja",
+                    reading.summary,
+                    note = note,
+                )
+            },
+        )
+    }
+
+    /** Glikemia (menu Pomiary pacjenta). */
+    fun measureGlycemiaStandalone() {
+        bleMeasure.startMeasure(
+            type = pl.cardioscp.rehab.ble.VitalMeasureType.GLUCOSE,
+            onSaved = { reading, note ->
+                recordClinicMeasurement(
+                    VitalKind.GLYCEMIA,
+                    "Glikemia",
                     reading.summary,
                     note = note,
                 )

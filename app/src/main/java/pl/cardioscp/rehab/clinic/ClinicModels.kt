@@ -7,6 +7,7 @@ enum class VitalKind {
     BLOOD_PRESSURE,
     WEIGHT,
     SPO2,
+    GLYCEMIA,
     PULSE,
     ECG,
 }

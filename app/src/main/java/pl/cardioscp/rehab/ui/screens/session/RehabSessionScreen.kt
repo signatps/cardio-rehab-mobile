@@ -100,6 +100,7 @@ import pl.cardioscp.rehab.ui.components.AnalogGauge
 import pl.cardioscp.rehab.ui.components.CoachBannerColors
 import pl.cardioscp.rehab.ui.components.ElectrodeMannequin
 import pl.cardioscp.rehab.ui.components.FlashingCoachBanner
+import pl.cardioscp.rehab.ui.components.SessionSchemeTimelineStrip
 import pl.cardioscp.rehab.ui.ecg.EcgPaper
 import pl.cardioscp.rehab.ui.screens.HomeViewModel
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
@@ -433,7 +434,7 @@ private fun IntroContent(
             style = MaterialTheme.typography.titleMedium,
             color = ProPlusColors.Navy,
         )
-        SessionTimelineStrip(includeWeight = includeWeight)
+        SessionSchemeTimelineStrip(includeWeight = includeWeight)
         Text(
             "Tryb EKG (EHO-Mini)",
             style = MaterialTheme.typography.titleMedium,
@@ -557,92 +558,6 @@ private fun IntroContent(
                 }
             }
         }
-    }
-}
-
-private data class TimelineStep(
-    val icon: ImageVector,
-    val badge: String,
-    val label: String,
-    val enabled: Boolean = true,
-)
-
-@Composable
-private fun SessionTimelineStrip(includeWeight: Boolean) {
-    val steps = listOf(
-        TimelineStep(Icons.Outlined.Hotel, "K", "Kwalifikacja EKG"),
-        TimelineStep(Icons.Outlined.MonitorHeart, "BP", "Ciśnienie"),
-        TimelineStep(Icons.Outlined.MonitorWeight, "kg", "Waga", enabled = includeWeight),
-        TimelineStep(Icons.Outlined.Assignment, "A", "Ankieta"),
-        TimelineStep(Icons.Outlined.HourglassBottom, "▶", "Start treningu"),
-        TimelineStep(Icons.AutoMirrored.Outlined.DirectionsRun, "T", "Trening"),
-        TimelineStep(Icons.Outlined.FavoriteBorder, "B", "Borg"),
-        TimelineStep(Icons.Outlined.Summarize, "Σ", "Podsumowanie"),
-    )
-    Column(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            steps.forEachIndexed { index, step ->
-                if (index > 0) {
-                    Box(
-                        Modifier
-                            .width(18.dp)
-                            .height(2.dp)
-                            .background(
-                                if (step.enabled) ProPlusColors.Accent.copy(alpha = 0.45f)
-                                else ProPlusColors.Line,
-                            ),
-                    )
-                }
-                TimelinePictogram(step)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TimelinePictogram(step: TimelineStep) {
-    val tint = if (step.enabled) ProPlusColors.Navy else ProPlusColors.Muted.copy(alpha = 0.45f)
-    val border = if (step.enabled) ProPlusColors.Line else ProPlusColors.Line.copy(alpha = 0.5f)
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(64.dp),
-    ) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = if (step.enabled) ProPlusColors.Surface else ProPlusColors.Bg,
-            border = BorderStroke(1.dp, border),
-            modifier = Modifier.size(52.dp),
-        ) {
-            Column(
-                Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Icon(step.icon, contentDescription = step.label, tint = tint, modifier = Modifier.size(22.dp))
-                Text(
-                    step.badge,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (step.enabled) ProPlusColors.Accent else ProPlusColors.Muted,
-                )
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            step.label,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (step.enabled) ProPlusColors.Muted else ProPlusColors.Muted.copy(alpha = 0.45f),
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            fontSize = 10.sp,
-            lineHeight = 11.sp,
-        )
     }
 }
 
