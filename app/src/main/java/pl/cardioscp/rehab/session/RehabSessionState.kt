@@ -15,6 +15,12 @@ enum class RehabStep {
     SUMMARY,
 }
 
+/** Podfaza EKG kwalifikacyjnego: najpierw 2 s elektrod + STOP, potem zapis. */
+enum class BaselineEcgPhase {
+    ELECTRODE_CHECK,
+    ACQUIRING,
+}
+
 data class SessionEcgEntry(
     val label: String,
     val recording: ScpRecording,
@@ -60,6 +66,8 @@ data class RehabSessionState(
     /** Podsumowanie tętna per cykl (po zakończeniu wysiłków). */
     val cycleHrSummaries: List<CycleHrSummary> = emptyList(),
     val admissionRemainingSec: Int? = null,
+    /** Tylko w [RehabStep.ECG_BASELINE]. */
+    val baselineEcgPhase: BaselineEcgPhase? = null,
     val busy: Boolean = false,
     val statusMessage: String? = null,
     val error: String? = null,

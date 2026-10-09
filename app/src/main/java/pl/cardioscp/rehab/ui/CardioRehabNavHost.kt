@@ -83,11 +83,13 @@ fun CardioRehabNavHost(
             ) {
                 when (current) {
                     AppDestination.DASHBOARD -> {
+                        val electrodes by viewModel.electrodeStatus.collectAsStateWithLifecycle()
                         DashboardScreen(
                             clinic = clinic,
                             livePulseBpm = state.lastPulseBpm,
                             todaySession = viewModel.todayArchivedSession(),
                             alertCount = viewModel.dashboardAlertCount(),
+                            electrodes = electrodes,
                             onOpenRehab = { destination = AppDestination.REHAB.name },
                             onOpenDayPlan = { destination = AppDestination.DAY_PLAN.name },
                             onOpenMeds = { destination = AppDestination.MEDS.name },

@@ -72,6 +72,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import pl.cardioscp.rehab.R
+import pl.cardioscp.rehab.bluetooth.protocol.ElectrodeStatus
+import pl.cardioscp.rehab.session.BaselineEcgPhase
 import pl.cardioscp.rehab.session.CycleHeartRateLimit
 import pl.cardioscp.rehab.session.DefaultRehabSurvey
 import pl.cardioscp.rehab.session.EcgHrTrend
@@ -86,6 +88,7 @@ import pl.cardioscp.rehab.session.TrainingPhaseKind
 import pl.cardioscp.rehab.ui.ble.MeasurePopup
 import pl.cardioscp.rehab.ui.components.AnalogGauge
 import pl.cardioscp.rehab.ui.components.CoachBannerColors
+import pl.cardioscp.rehab.ui.components.ElectrodeMannequin
 import pl.cardioscp.rehab.ui.components.FlashingCoachBanner
 import pl.cardioscp.rehab.ui.screens.HomeViewModel
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
@@ -97,6 +100,7 @@ fun RehabSessionScreen(
     onOpenEcg: () -> Unit,
 ) {
     val session by viewModel.rehabSession.collectAsStateWithLifecycle()
+    val electrodes by viewModel.electrodeStatus.collectAsStateWithLifecycle()
     val state = session
 
     Column(
@@ -121,6 +125,8 @@ fun RehabSessionScreen(
 
         if (state == null) {
             IntroContent(
+                electrodes = electrodes,
+                onRefreshElectrodes = viewModel::refreshElectrodes,
                 onStart = { includeWeight, limits ->
                     viewModel.startRehabSession(includeWeight, limits)
                 },
@@ -140,6 +146,8 @@ fun RehabSessionScreen(
 
         when (state.step) {
             RehabStep.INTRO -> IntroContent(
+                electrodes = electrodes,
+                onRefreshElectrodes = viewModel::refreshElectrodes,
                 onStart = { includeWeight, limits ->
                     viewModel.startRehabSession(includeWeight, limits)
                 },
@@ -148,6 +156,8 @@ fun RehabSessionScreen(
                 EcgHoldStillPanel(
                     subtitle = "EKG kwalifikacyjne (przed sesją)",
                     busy = state.busy,
+                    phase = state.baselineEcgPhase ?: BaselineEcgPhase.ELECTRODE_CHECK,
+                    electrodes = electrodes,
                     onRetry = viewModel::beginBaselineEcg,
                 )
             }
@@ -282,6 +292,7 @@ fun RehabSessionScreen(
                     TrainingPhaseContent(
                         training = t,
                         exerciseKind = state.trainingPlan.exerciseKind,
+                        electrodes = electrodes,
                         onSpeakCue = viewModel::speakHeartRateCue,
                         onComment = viewModel::reportEcgEvent,
                         onConfirmEndExercise = { viewModel.confirmEcgEvent(endTraining = false) },
@@ -327,12 +338,15 @@ private fun StepHeader(step: RehabStep) {
 
 @Composable
 private fun IntroContent(
+    electrodes: ElectrodeStatus,
+    onRefreshElectrodes: () -> Unit,
     onStart: (includeWeight: Boolean, limits: List<CycleHeartRateLimit>) -> Unit,
 ) {
     var includeWeight by remember { mutableStateOf(true) }
     val defaults = remember { HeartRateCoach.defaultLimits(2) }
     var cycleMins by remember { mutableStateOf(defaults.map { it.minBpm }) }
     var cycleMaxs by remember { mutableStateOf(defaults.map { it.maxBpm }) }
+    val canStart = electrodes.allAttached
     Column(
         Modifier
             .fillMaxWidth()
@@ -387,15 +401,18 @@ private fun IntroContent(
                 }
             }
             Column(
-                Modifier.widthIn(min = 160.dp, max = 220.dp),
+                Modifier.widthIn(min = 168.dp, max = 230.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                CoachArt(
-                    resId = R.drawable.coach_nordic,
-                    contentDescription = "Nordic walking",
-                    size = 140.dp,
+                ElectrodeMannequin(
+                    status = electrodes,
+                    size = 132.dp,
+                    showLegend = true,
                 )
+                TextButton(onClick = onRefreshElectrodes) {
+                    Text("Odśwież elektrody")
+                }
                 Button(
                     onClick = {
                         val limits = defaults.indices.map { idx ->
@@ -407,9 +424,18 @@ private fun IntroContent(
                         }
                         onStart(includeWeight, limits)
                     },
+                    enabled = canStart,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Rozpocznij sesję", style = MaterialTheme.typography.labelLarge)
+                }
+                if (!canStart) {
+                    Text(
+                        "Podłącz wszystkie elektrody (RA, LA, LF, RF, V1), aby startować.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ProPlusColors.ResultAlert,
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
         }
@@ -709,6 +735,7 @@ private fun SurveyAnswerChip(
 private fun TrainingPhaseContent(
     training: pl.cardioscp.rehab.session.TrainingLiveState,
     exerciseKind: ExerciseKind,
+    electrodes: ElectrodeStatus,
     onSpeakCue: (String) -> Unit,
     onComment: () -> Unit,
     onConfirmEndExercise: () -> Unit,
@@ -750,11 +777,24 @@ private fun TrainingPhaseContent(
             style = MaterialTheme.typography.labelLarge,
             color = ProPlusColors.Muted,
         )
-        CoachArt(
-            resId = pictogramRes,
-            contentDescription = headline,
-            size = 168.dp,
-        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CoachArt(
+                resId = pictogramRes,
+                contentDescription = headline,
+                size = 140.dp,
+                modifier = Modifier.weight(1f),
+            )
+            ElectrodeMannequin(
+                status = electrodes,
+                size = 140.dp,
+                showLegend = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
         if (visual == TrainingCoachVisual.EXERCISE) {
             Text(
                 exerciseKind.displayNamePl,
@@ -910,8 +950,17 @@ private fun CoachArt(
 private fun EcgHoldStillPanel(
     subtitle: String,
     busy: Boolean,
+    phase: BaselineEcgPhase,
+    electrodes: ElectrodeStatus,
     onRetry: () -> Unit,
 ) {
+    val checking = phase == BaselineEcgPhase.ELECTRODE_CHECK
+    val coachRes = if (checking) R.drawable.coach_stop else R.drawable.coach_hold_still
+    val headline = if (checking) {
+        "Sprawdzanie elektrod — nie ruszaj się"
+    } else {
+        "Pozostań nieruchomo — trwa zapis EKG"
+    }
     Column(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -922,21 +971,34 @@ private fun EcgHoldStillPanel(
             style = MaterialTheme.typography.labelLarge,
             color = ProPlusColors.Muted,
         )
-        CoachArt(
-            resId = R.drawable.coach_hold_still,
-            contentDescription = "Pozostań nieruchomo",
-            size = 160.dp,
-        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CoachArt(
+                resId = coachRes,
+                contentDescription = headline,
+                size = 150.dp,
+                modifier = Modifier.weight(1f),
+            )
+            ElectrodeMannequin(
+                status = electrodes,
+                size = 150.dp,
+                showLegend = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
         Text(
-            "Pozostań nieruchomo — trwa zapis EKG",
+            headline,
             style = MaterialTheme.typography.headlineSmall,
-            color = ProPlusColors.Navy,
+            color = if (checking) ProPlusColors.ResultAlert else ProPlusColors.Navy,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
         if (busy) {
             LinearProgressIndicator(
-                progress = { 0f },
+                progress = { if (checking) 0.35f else 0f },
                 modifier = Modifier.fillMaxWidth(0.7f),
             )
         } else {

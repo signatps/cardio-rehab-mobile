@@ -67,21 +67,61 @@ class RehabSessionEngine(
         _state.value = null
     }
 
+    fun setGateError(message: String) {
+        update {
+            it.copy(
+                step = RehabStep.INTRO,
+                busy = false,
+                error = message,
+                statusMessage = null,
+            )
+        }
+    }
+
     fun beginBaselineEcg() {
         val s = _state.value ?: return
         if (deviceClient.connectionState.value !is EhoMiniConnectionState.Connected) {
             update { it.copy(error = "Połącz najpierw EHO-Mini (SPP).") }
             return
         }
-        update {
-            it.copy(
-                step = RehabStep.ECG_BASELINE,
-                busy = true,
-                error = null,
-                statusMessage = "Pozostań nieruchomo — trwa zapis EKG",
-            )
-        }
         scope.launch {
+            // 1) 2 s: sprawdzenie elektrod + ludzik STOP (zakaz ruchu)
+            update {
+                it.copy(
+                    step = RehabStep.ECG_BASELINE,
+                    baselineEcgPhase = BaselineEcgPhase.ELECTRODE_CHECK,
+                    busy = true,
+                    error = null,
+                    statusMessage = "Sprawdzanie elektrod — pozostań nieruchomo",
+                )
+            }
+            val electrodes = runCatching { sessionController.refreshElectrodes() }
+                .getOrDefault(sessionController.electrodeStatus.value)
+            delay(2_000)
+            val afterCheck = sessionController.electrodeStatus.value.let { current ->
+                if (current.known) current else electrodes
+            }
+            if (!afterCheck.allAttached) {
+                update {
+                    it.copy(
+                        step = RehabStep.INTRO,
+                        baselineEcgPhase = null,
+                        busy = false,
+                        error = "Nie można rozpocząć EKG — ${afterCheck.summaryPl}",
+                        statusMessage = null,
+                    )
+                }
+                return@launch
+            }
+            // 2) Ludzik pomiaru EKG + zapis
+            update {
+                it.copy(
+                    baselineEcgPhase = BaselineEcgPhase.ACQUIRING,
+                    busy = true,
+                    error = null,
+                    statusMessage = "Pozostań nieruchomo — trwa zapis EKG",
+                )
+            }
             val result = acquireEcg(
                 label = "EKG kwalifikacyjne (przed sesją)",
                 totalSeconds = s.trainingPlan.acquireSec,
@@ -92,6 +132,7 @@ class RehabSessionEngine(
                     update {
                         it.copy(
                             busy = false,
+                            baselineEcgPhase = null,
                             statusMessage = "Zapisano EKG kwalifikacyjne",
                             ecgEntries = it.ecgEntries + SessionEcgEntry(
                                 label = "EKG kwalifikacyjne (przed sesją)",
@@ -109,6 +150,7 @@ class RehabSessionEngine(
                     update {
                         it.copy(
                             busy = false,
+                            baselineEcgPhase = null,
                             error = e.message ?: "Błąd EKG spoczynkowego",
                             statusMessage = null,
                         )
@@ -555,6 +597,11 @@ class RehabSessionEngine(
         return runCatching {
             if (deviceClient.connectionState.value !is EhoMiniConnectionState.Connected) {
                 error("Brak połączenia SPP z EHO-Mini")
+            }
+            val electrodes = runCatching { sessionController.refreshElectrodes() }
+                .getOrDefault(sessionController.electrodeStatus.value)
+            if (!electrodes.allAttached) {
+                error(electrodes.summaryPl)
             }
             val userId = userIdProvider()
             update { it.copy(statusMessage = "$label: Init + EKG Offline (${totalSeconds}s)…") }

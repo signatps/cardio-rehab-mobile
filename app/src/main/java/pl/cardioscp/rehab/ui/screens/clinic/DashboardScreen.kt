@@ -49,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import pl.cardioscp.rehab.ble.BpWho
+import pl.cardioscp.rehab.bluetooth.protocol.ElectrodeStatus
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
 import pl.cardioscp.rehab.clinic.DayPlanItem
 import pl.cardioscp.rehab.clinic.DayPlanKind
@@ -58,6 +59,7 @@ import pl.cardioscp.rehab.clinic.WelcomePhrase
 import pl.cardioscp.rehab.session.ArchivedRehabSession
 import pl.cardioscp.rehab.session.CycleHrSummary
 import pl.cardioscp.rehab.session.CycleHrZoneOutcome
+import pl.cardioscp.rehab.ui.components.ElectrodeMannequin
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import java.time.format.DateTimeFormatter
 
@@ -67,6 +69,7 @@ fun DashboardScreen(
     livePulseBpm: Int?,
     todaySession: ArchivedRehabSession?,
     alertCount: Int = 0,
+    electrodes: ElectrodeStatus = ElectrodeStatus.unknown(),
     onOpenRehab: () -> Unit,
     onOpenDayPlan: () -> Unit,
     onOpenMeds: () -> Unit,
@@ -209,7 +212,23 @@ fun DashboardScreen(
                 showMeasure = false,
                 modifier = Modifier.weight(1f),
             )
+            ElectrodeMannequin(
+                status = electrodes,
+                size = 88.dp,
+                showLegend = false,
+                modifier = Modifier.padding(start = 4.dp),
+            )
         }
+
+        Text(
+            electrodes.summaryPl,
+            style = MaterialTheme.typography.labelMedium,
+            color = when {
+                electrodes.allAttached -> ProPlusColors.ResultGood
+                electrodes.detachedSites.isNotEmpty() -> ProPlusColors.ResultAlert
+                else -> ProPlusColors.Muted
+            },
+        )
 
         Text(
             "Plan na dziś · ${clinic.planDate.format(java.time.format.DateTimeFormatter.ofPattern("d.MM.yyyy"))}",

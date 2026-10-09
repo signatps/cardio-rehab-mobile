@@ -17,6 +17,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import pl.cardioscp.rehab.bluetooth.protocol.CommandFactory
 import pl.cardioscp.rehab.bluetooth.protocol.EcgOfflineCreateOrchestrator
+import pl.cardioscp.rehab.bluetooth.protocol.ElectrodeStatus
 import pl.cardioscp.rehab.bluetooth.protocol.FrameType
 import pl.cardioscp.rehab.bluetooth.protocol.PayloadCodec
 import pl.cardioscp.rehab.bluetooth.protocol.ProtocolFrame
@@ -58,6 +59,9 @@ class ProtocolSessionController(
     private val _electrodeWarning = MutableStateFlow<String?>(null)
     val electrodeWarning: StateFlow<String?> = _electrodeWarning.asStateFlow()
 
+    private val _electrodeStatus = MutableStateFlow(ElectrodeStatus.unknown())
+    val electrodeStatus: StateFlow<ElectrodeStatus> = _electrodeStatus.asStateFlow()
+
     private val _lastScpBytes = MutableStateFlow<ByteArray?>(null)
     val lastScpBytes: StateFlow<ByteArray?> = _lastScpBytes.asStateFlow()
 
@@ -69,7 +73,73 @@ class ProtocolSessionController(
     private var ecgOrch: EcgOfflineCreateOrchestrator? = null
     private var scpOrch: ScpDownloadOrchestrator? = null
     private var collectJob: Job? = null
+    private var electrodeListenJob: Job? = null
+    private var electrodePollJob: Job? = null
     private var activeOutcome: CompletableDeferred<Status>? = null
+
+    init {
+        electrodeListenJob = scope.launch(Dispatchers.IO) {
+            client.incomingFrames.collect { frame ->
+                noteElectrodeFrame(frame)
+            }
+        }
+    }
+
+    fun resetElectrodes() {
+        _electrodeStatus.value = ElectrodeStatus.unknown()
+        _electrodeWarning.value = null
+        electrodePollJob?.cancel()
+        electrodePollJob = null
+    }
+
+    /** Poll Get(electrodes) while linked — keeps mannequin in sync outside pulse/ECG streams. */
+    fun startElectrodePolling(intervalMs: Long = 4_000L) {
+        electrodePollJob?.cancel()
+        electrodePollJob = scope.launch(Dispatchers.IO) {
+            while (true) {
+                runCatching { refreshElectrodes() }
+                delay(intervalMs)
+            }
+        }
+    }
+
+    fun stopElectrodePolling() {
+        electrodePollJob?.cancel()
+        electrodePollJob = null
+    }
+
+    /**
+     * Query `Get 0x02` (odpięte elektrody). Returns latest [ElectrodeStatus].
+     * Safe to call while idle; during an active scenario still works (shared frame bus).
+     */
+    suspend fun refreshElectrodes(timeoutMs: Long = 3_500L): ElectrodeStatus =
+        withContext(Dispatchers.IO) {
+            val before = _electrodeStatus.value.updatedAtMs
+            val get = commands.get(PayloadCodec.GetInfoId.ELECTRODES)
+            runCatching { client.sendFrame(get) }.getOrElse {
+                return@withContext _electrodeStatus.value
+            }
+            withTimeoutOrNull(timeoutMs) {
+                client.incomingFrames.first { frame ->
+                    if (frame.type != FrameType.GET_ANS || frame.payload.isEmpty()) {
+                        return@first false
+                    }
+                    val ans = PayloadCodec.parseGetAns(frame.payload)
+                    if (ans.infoId != PayloadCodec.GetInfoId.ELECTRODES) return@first false
+                    applyElectrodeStatus(ElectrodeStatus.fromGetAnsElectrodes(ans.value))
+                    true
+                }
+            }
+            // If device answered with same timestamp edge-case, still return current.
+            if (_electrodeStatus.value.updatedAtMs == before && before == null) {
+                _electrodeStatus.value
+            } else {
+                _electrodeStatus.value
+            }
+        }
+
+    /** True when protocol reported all of RA/LA/LF/RF/V1 attached. */
+    fun electrodesReady(): Boolean = _electrodeStatus.value.allAttached
 
     fun startPulseScenario() {
         scope.launch {
@@ -175,7 +245,6 @@ class ProtocolSessionController(
                 prepareDevice()
                 _lastPulseBpm.value = null
                 _pulseSampleCount.value = 0
-                _electrodeWarning.value = null
                 val orch = PulseScenarioOrchestrator(
                     commands = commands,
                     autoStopAfterPulses = Int.MAX_VALUE,
@@ -247,11 +316,31 @@ class ProtocolSessionController(
     }
 
     private fun noteDeviceAlerts(frame: ProtocolFrame) {
-        if (frame.type != FrameType.DEVICE_ERROR || frame.payload.isEmpty()) return
-        val code = frame.payload[0].toInt() and 0xFF
-        if (code == 0x01) {
-            _electrodeWarning.value =
-                "Elektrody odpięte — urządzenie raportuje puls 0, aż będzie sygnał EKG"
+        noteElectrodeFrame(frame)
+    }
+
+    private fun noteElectrodeFrame(frame: ProtocolFrame) {
+        when (frame.type) {
+            FrameType.DEVICE_ERROR -> {
+                ElectrodeStatus.fromDevErrorPayload(frame.payload)?.let { applyElectrodeStatus(it) }
+            }
+            FrameType.GET_ANS -> {
+                if (frame.payload.isEmpty()) return
+                val ans = runCatching { PayloadCodec.parseGetAns(frame.payload) }.getOrNull() ?: return
+                if (ans.infoId == PayloadCodec.GetInfoId.ELECTRODES) {
+                    applyElectrodeStatus(ElectrodeStatus.fromGetAnsElectrodes(ans.value))
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    private fun applyElectrodeStatus(status: ElectrodeStatus) {
+        _electrodeStatus.value = status
+        _electrodeWarning.value = if (status.detachedSites.isNotEmpty()) {
+            status.summaryPl
+        } else {
+            null
         }
     }
 

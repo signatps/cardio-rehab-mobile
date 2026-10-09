@@ -30,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import pl.cardioscp.rehab.R
 import pl.cardioscp.rehab.bluetooth.BluetoothPermissionHelper
 import pl.cardioscp.rehab.bluetooth.EhoMiniConnectionState
+import pl.cardioscp.rehab.ui.components.ElectrodeMannequin
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 
 @Composable
@@ -39,6 +40,7 @@ fun HomeScreen(
     onOpenRehabSession: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val electrodes by viewModel.electrodeStatus.collectAsStateWithLifecycle()
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
     ) {
@@ -116,6 +118,14 @@ fun HomeScreen(
                     textAlign = TextAlign.Center,
                     color = ProPlusColors.Navy,
                 )
+                ElectrodeMannequin(
+                    status = electrodes,
+                    size = 150.dp,
+                    showLegend = true,
+                )
+                TextButton(onClick = viewModel::refreshElectrodes) {
+                    Text("Odśwież elektrody")
+                }
                 Text(
                     text = when (val bpm = state.lastPulseBpm) {
                         null -> stringResource(R.string.pulse_waiting)
@@ -135,14 +145,6 @@ fun HomeScreen(
                         color = ProPlusColors.Muted,
                     )
                 }
-                state.electrodeWarning?.let { warn ->
-                    Text(
-                        text = warn,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
                 state.sessionLabel?.let { label ->
                     Text(
                         text = label,
@@ -160,18 +162,21 @@ fun HomeScreen(
                 }
                 Button(
                     onClick = onOpenRehabSession,
+                    enabled = electrodes.allAttached,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.start_rehab_session))
                 }
                 Button(
                     onClick = viewModel::onStartPulseScenario,
+                    enabled = electrodes.allAttached,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.scenario_pulse))
                 }
                 Button(
                     onClick = viewModel::onStartEcgOfflineScenario,
+                    enabled = electrodes.allAttached,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.scenario_ecg_offline))

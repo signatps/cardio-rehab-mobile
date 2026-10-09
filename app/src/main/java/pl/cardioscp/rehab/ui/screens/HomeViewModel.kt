@@ -15,6 +15,7 @@ import pl.cardioscp.rehab.bluetooth.BondedEcgDevice
 import pl.cardioscp.rehab.bluetooth.EhoMiniConnectionState
 import pl.cardioscp.rehab.bluetooth.ProtocolSessionController
 import pl.cardioscp.rehab.bluetooth.SppEhoMiniDeviceClient
+import pl.cardioscp.rehab.bluetooth.protocol.ElectrodeStatus
 import pl.cardioscp.rehab.CardioRehabApp
 import pl.cardioscp.rehab.clinic.ClinicDemoStore
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
@@ -82,6 +83,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         onOpenViewer = { openRecording(it) },
     )
     val rehabSession: StateFlow<RehabSessionState?> = rehabEngine.state
+    val electrodeStatus: StateFlow<ElectrodeStatus> = sessionController.electrodeStatus
 
     private val permissionsOk = MutableStateFlow(
         BluetoothPermissionHelper.hasAllPermissions(application),
@@ -233,18 +235,38 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         heartRateLimits: List<pl.cardioscp.rehab.session.CycleHeartRateLimit> =
             pl.cardioscp.rehab.session.HeartRateCoach.defaultLimits(2),
     ) {
-        rehabEngine.start(
-            includeWeight = includeWeight,
-            plan = TrainingPlan(
+        viewModelScope.launch {
+            val plan = TrainingPlan(
                 cycles = 2,
                 exerciseSec = 15,
                 restSec = 15,
                 acquireSec = 5,
                 admissionWaitSec = 10,
                 heartRateLimits = heartRateLimits,
-            ),
-        )
-        rehabEngine.beginBaselineEcg()
+            )
+            if (deviceClient.connectionState.value !is EhoMiniConnectionState.Connected) {
+                rehabEngine.start(includeWeight = includeWeight, plan = plan)
+                rehabEngine.setGateError("Połącz najpierw EHO-Mini (SPP).")
+                return@launch
+            }
+            val electrodes = runCatching { sessionController.refreshElectrodes() }
+                .getOrDefault(sessionController.electrodeStatus.value)
+            if (!electrodes.allAttached) {
+                rehabEngine.start(includeWeight = includeWeight, plan = plan)
+                rehabEngine.setGateError(
+                    "Nie można rozpocząć sesji — ${electrodes.summaryPl}",
+                )
+                return@launch
+            }
+            rehabEngine.start(includeWeight = includeWeight, plan = plan)
+            rehabEngine.beginBaselineEcg()
+        }
+    }
+
+    fun refreshElectrodes() {
+        viewModelScope.launch {
+            runCatching { sessionController.refreshElectrodes() }
+        }
     }
 
     /** TTS coachingu tętna (PRZYSPIESZ / ZWOLNIJ) — bez spamu przy tym samym cue. */
@@ -555,6 +577,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 else -> {
                     val target = candidates.first()
                     runCatching { deviceClient.connect(target.address) }
+                        .onSuccess {
+                            sessionController.startElectrodePolling()
+                            runCatching { sessionController.refreshElectrodes() }
+                        }
                         .onFailure {
                             localError.value = it.message
                                 ?: "Nie udało się połączyć z ${target.name}"
@@ -566,6 +592,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onDisconnectClicked() {
         localError.value = null
+        sessionController.stopElectrodePolling()
+        sessionController.resetElectrodes()
         sessionController.stop()
         viewModelScope.launch {
             runCatching { deviceClient.disconnect() }
@@ -574,17 +602,33 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onStartPulseScenario() {
         if (deviceClient.connectionState.value !is EhoMiniConnectionState.Connected) return
-        sessionController.startPulseScenario()
+        viewModelScope.launch {
+            val electrodes = runCatching { sessionController.refreshElectrodes() }
+                .getOrDefault(sessionController.electrodeStatus.value)
+            if (!electrodes.allAttached) {
+                localError.value = "Nie można startować pulsu — ${electrodes.summaryPl}"
+                return@launch
+            }
+            sessionController.startPulseScenario()
+        }
     }
 
     fun onStartEcgOfflineScenario() {
         val connected = deviceClient.connectionState.value as? EhoMiniConnectionState.Connected
             ?: return
-        val userId = bondedDevices.value
-            .firstOrNull { it.address == connected.address }
-            ?.serialSuffix
-            ?: connected.deviceName.takeLast(6)
-        sessionController.startEcgOfflineCreateScenario(userId = userId)
+        viewModelScope.launch {
+            val electrodes = runCatching { sessionController.refreshElectrodes() }
+                .getOrDefault(sessionController.electrodeStatus.value)
+            if (!electrodes.allAttached) {
+                localError.value = "Nie można startować EKG — ${electrodes.summaryPl}"
+                return@launch
+            }
+            val userId = bondedDevices.value
+                .firstOrNull { it.address == connected.address }
+                ?.serialSuffix
+                ?: connected.deviceName.takeLast(6)
+            sessionController.startEcgOfflineCreateScenario(userId = userId)
+        }
     }
 
     fun onDownloadScp() {
