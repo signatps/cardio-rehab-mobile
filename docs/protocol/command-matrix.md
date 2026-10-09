@@ -17,7 +17,7 @@
 | `0x0B` SCP Done | app | 0 | — | kasuje SCP na urządzeniu |
 | `0x0C` Get Pulse | app | **2** | interval u16 LE ×0.1s | `0` = stop + ostatni puls |
 | `0x0D` Pulse Value | device | 1 | bpm | ACK (ustalenie ProPlus); timer `interval*100` ms |
-| `0x0E/0x11` Online | — | — | — | **nieobsługiwane** na tym FW |
+| `0x0E/0x11` Online | app | 0 | — | FW Wojtek: OK; stary FW → DevError; Offline gasi Online |
 | `0x12` End | app | 0 | — | czyści `app_init_flag` (gdy ECG nie w toku) |
 | `0x13` Get | app | 1 | id | bat/elektrody/IMEI/czas |
 | `0x15` Offline Stop | app | 0 | — | przerywa offline |

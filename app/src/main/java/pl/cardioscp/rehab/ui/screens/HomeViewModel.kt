@@ -200,8 +200,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             "Scenariusz 2: odbiór pulsu…"
                         ProtocolSessionController.Scenario.ECG_OFFLINE_CREATE ->
                             "Scenariusz 3: zapis ECG Offline na urządzeniu…"
-                        ProtocolSessionController.Scenario.ECG_ONLINE_ACQUIRE ->
-                            "EKG Online + Offline — strumień i zapis SCP…"
+                        ProtocolSessionController.Scenario.ECG_ONLINE_SESSION ->
+                            "EKG Online — ciągły strumień, fragmenty z taśmy…"
                         ProtocolSessionController.Scenario.SCP_DOWNLOAD ->
                             "Pobieranie całego pliku SCP…"
                     }

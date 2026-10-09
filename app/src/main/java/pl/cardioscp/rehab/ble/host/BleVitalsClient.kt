@@ -12,6 +12,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -302,11 +303,12 @@ class BleVitalsClient(context: Context) {
         }
         val uuids = result.scanRecord?.serviceUuids.orEmpty().map { it.uuid.toString() }
         val weightMode = BleDeviceIdentity.isWeightKind(k)
+        // JPD/iXellence: wynik często tylko w Manufacturer Data (bez nazwy BT).
         if (weightMode && (BleDeviceIdentity.isIxellenceName(name) || hasJpdManufacturer(result))) {
             val ix = consumeIxellenceAds(result)
             val hit = BleDeviceHit(
                 address,
-                name ?: "JPD",
+                name ?: "JPD / iXellence",
                 result.rssi,
                 BleVitalKind.WEIGHT_IXELLENCE,
             )
@@ -322,7 +324,16 @@ class BleVitalsClient(context: Context) {
             else -> k
         }
         if (resolved == null && (BleDeviceIdentity.isBpKind(k) || weightMode)) return
-        val hit = BleDeviceHit(address, name ?: address, result.rssi, resolved)
+        val hit = BleDeviceHit(
+            address,
+            name ?: when (resolved) {
+                BleVitalKind.WEIGHT_CHARDER -> "Charder"
+                BleVitalKind.WEIGHT_IXELLENCE -> "JPD / iXellence"
+                else -> address
+            },
+            result.rssi,
+            resolved,
+        )
         hits[address] = hit
         emitScanHit(hit)
     }
@@ -363,15 +374,25 @@ class BleVitalsClient(context: Context) {
                 else -> "Szukam ${kind.deviceHint}…"
             },
         )
-        val started = runCatching { scanner.startScan(scanCallback) }
+        // LOW_LATENCY — ważne gdy równolegle trwa Classic SPP (EHO-Mini w sesji rehab).
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+        runCatching { scanner.stopScan(scanCallback) }
+        val started = runCatching { scanner.startScan(null, settings, scanCallback) }
         if (started.isFailure) {
-            active.set(false)
-            val detail = started.exceptionOrNull()?.message ?: started.exceptionOrNull()?.javaClass?.simpleName
-            emitStatus(
-                "Nie udało się zacząć skanu${detail?.let { ": $it" } ?: ""}. " +
-                    "Android 10: włącz Lokalizację systemową i nadaj lokalizację aplikacji.",
-            )
-            return
+            // Fallback bez settings (starsze API / OEM).
+            val again = runCatching { scanner.startScan(scanCallback) }
+            if (again.isFailure) {
+                active.set(false)
+                val detail = started.exceptionOrNull()?.message
+                    ?: again.exceptionOrNull()?.javaClass?.simpleName
+                emitStatus(
+                    "Nie udało się zacząć skanu${detail?.let { ": $it" } ?: ""}. " +
+                        "Android 10: włącz Lokalizację systemową i nadaj lokalizację aplikacji.",
+                )
+                return
+            }
         }
         scheduleScanWindow(scanner, kind)
     }
@@ -395,7 +416,11 @@ class BleVitalsClient(context: Context) {
                     "Brak urządzenia — ponawiam skan (${scanMs / 1000} s). " +
                         "Włącz pomiar na aparacie…",
                 )
-                val again = runCatching { scanner.startScan(scanCallback) }
+                val settings = ScanSettings.Builder()
+                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                    .build()
+                val again = runCatching { scanner.startScan(null, settings, scanCallback) }
+                    .recoverCatching { scanner.startScan(scanCallback) }
                 if (again.isSuccess) {
                     scheduleScanWindow(scanner, kind)
                 } else {
@@ -425,6 +450,8 @@ class BleVitalsClient(context: Context) {
         onProgress: ((Float?) -> Unit)? = null,
         onChooseHistory: ((title: String, options: List<VitalHistoryOption>, fresh: VitalReading?) -> Unit)? = null,
     ) {
+        // Zatrzymaj skan przed GATT — Samsung / dual-mode (SPP+BLE) często gubi connect.
+        runCatching { adapter?.bluetoothLeScanner?.stopScan(scanCallback) }
         stopGattOnly()
         handler.removeCallbacksAndMessages(null)
         this.kind = kind
@@ -460,7 +487,12 @@ class BleVitalsClient(context: Context) {
             kind == BleVitalKind.WEIGHT_AUTO ->
                 prior
                     ?: BleDeviceIdentity.resolveWeight(deviceNameHint, emptyList(), address)
-                    ?: BleVitalKind.WEIGHT_TD2555
+                    ?: run {
+                        // Nie zgaduj TD-2555 — Charder/JPD muszą mieć resolvedKind ze skanu.
+                        emitStatus("Nie rozpoznano modelu wagi — wybierz z listy lub zmierz ponownie.")
+                        onDone(Result.failure(IllegalStateException("Nie rozpoznano modelu wagi")))
+                        return
+                    }
             else -> kind
         }
         weightListenOnly = false
@@ -546,7 +578,12 @@ class BleVitalsClient(context: Context) {
         sessionKind = BleVitalKind.WEIGHT_IXELLENCE
         active.set(true)
         emitStatus("iXellence: nasłuch reklam BLE — stań na wadze…")
-        val started = runCatching { scanner.startScan(scanCallback) }
+        runCatching { scanner.stopScan(scanCallback) }
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+        val started = runCatching { scanner.startScan(null, settings, scanCallback) }
+            .recoverCatching { scanner.startScan(scanCallback) }
         if (started.isFailure) {
             active.set(false)
             onDone(

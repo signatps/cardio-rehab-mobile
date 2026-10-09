@@ -94,7 +94,10 @@ object BleDeviceIdentity {
         val n = name
         return n.contains("charder", ignoreCase = true) ||
             n.contains("ms6110", ignoreCase = true) ||
-            n.contains("ms-6110", ignoreCase = true)
+            n.contains("ms-6110", ignoreCase = true) ||
+            n.contains("6110BT", ignoreCase = true) ||
+            (n.contains("6110", ignoreCase = true) && n.contains("MS", ignoreCase = true)) ||
+            Regex("""(?i)\bMS\s*6110\b""").containsMatchIn(n)
     }
 
     fun isIxellenceName(name: String?): Boolean {
@@ -181,6 +184,17 @@ object BleDeviceIdentity {
         val n = name.orEmpty()
         if (isIxellenceName(n)) return BleVitalKind.WEIGHT_IXELLENCE
         if (isCharderName(n)) return BleVitalKind.WEIGHT_CHARDER
+        val uuids = serviceUuids.map { it.lowercase() }
+        if (uuids.any { it.contains("3a1bc6e0-fb06-11e1-b9c2-0002a5d5c51b") }) {
+            return BleVitalKind.WEIGHT_CHARDER
+        }
+        if (uuids.any {
+                it.contains("0000181d-0000-1000-8000-00805f9b34fb") ||
+                    it.contains("0000fff0-0000-1000-8000-00805f9b34fb")
+            } && (isTaiDoc(n, address) || n.contains("2555") || n.contains("w550", ignoreCase = true))
+        ) {
+            return BleVitalKind.WEIGHT_TD2555
+        }
         // TaiDoc OEM: nazwa TD/TAIDOC, BDA C026, albo FORA/W550/2555
         if (isTaiDoc(n, address) ||
             n.contains("2555") ||

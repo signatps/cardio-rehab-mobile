@@ -1,16 +1,29 @@
 package pl.cardioscp.rehab.session
 
 /**
+ * Profil sesji treningowej.
+ * Na razie tylko [INTERVAL]; później: continuous, corridor test, …
+ */
+enum class SessionProfileKind {
+    /** Interwał: EKG spoczynkowe → ×N (wysiłek → EKG szczyt → odpoczynek). */
+    INTERVAL,
+}
+
+/**
  * Trening sekwencyjny zgodnie z wymaganiami sesji:
  * EKG spoczynkowe na start → ×N (ćwiczenie + puls → EKG szczyt → odpoczynek).
+ *
+ * W trybie Online fragmenty EKG wycinane są w fazach [ECG_REST_START] / [ECG_PEAK]
+ * (długość [acquireSec]) z ciągłej taśmy — bez Offline na urządzeniu.
  */
 data class TrainingPlan(
+    val profile: SessionProfileKind = SessionProfileKind.INTERVAL,
     val cycles: Int = 2,
     /** Czas wysiłku [s]. */
     val exerciseSec: Int = 15,
     /** Czas odpoczynku [s] — startuje po zakończeniu EKG szczytowego. */
     val restSec: Int = 15,
-    /** Czas akwizycji EKG Offline [s]. */
+    /** Długość fragmentu EKG [s] (Offline: czas Offline; Online: wycinek taśmy). */
     val acquireSec: Int = 5,
     /** Automatyczne dopuszczenie po ankiecie [s]. */
     val admissionWaitSec: Int = 10,
@@ -63,6 +76,10 @@ data class TrainingTimeline(
 )
 
 object TrainingPlanner {
+    fun timeline(plan: TrainingPlan): TrainingTimeline = when (plan.profile) {
+        SessionProfileKind.INTERVAL -> interval(plan)
+    }
+
     /**
      * EKG spoczynkowe → (Wysiłek → EKG szczyt → Odpoczynek) × cycles
      */

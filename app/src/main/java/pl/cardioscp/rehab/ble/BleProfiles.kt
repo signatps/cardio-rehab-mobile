@@ -237,9 +237,15 @@ object BleProfiles {
     ): Boolean {
         @Suppress("UNUSED_PARAMETER")
         val ignoredAddress = address
-        @Suppress("UNUSED_PARAMETER")
-        val ignoredUuids = serviceUuids
-        return matchesName(kind, advertisedName)
+        if (matchesName(kind, advertisedName)) return true
+        // Charder często reklamuje UUID usługi bez czytelnej nazwy BT.
+        val uuids = serviceUuids.map { it.lowercase() }
+        val charderUuid = CHARDER.serviceUuid.lowercase()
+        val isCharderUuid = charderUuid.isNotBlank() && uuids.any { it.contains(charderUuid) }
+        return when (kind) {
+            BleVitalKind.WEIGHT_AUTO, BleVitalKind.WEIGHT_CHARDER -> isCharderUuid
+            else -> false
+        }
     }
 }
 

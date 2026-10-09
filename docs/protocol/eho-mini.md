@@ -54,10 +54,10 @@ Minimalna ramka (pusty payload): 8 bajtów.
 | `0x0B` | ScpDone | app → device | ACK; device kasuje SCP | pusty |
 | `0x0C` | GetPulse | app → device | ACK | interwał `ushort` ×0.1 s (`0` = jeden pomiar) |
 | `0x0D` | PulseValue | device → app | ProPlus: ACK; Silvermedia: „nie wymaga” — **implementujemy ACK** (ustalenie ProPlus) | 1 B puls |
-| `0x0E` | EcgOnline | app → device | → Online Info | pusty |
-| `0x0F` | EcgOnlineInfo | device → app | — | AVM, kanały, kody odprowadzeń |
-| `0x10` | EcgOnlineData | device → app | — | nr próbki + int16 samples |
-| `0x11` | EcgOnlineStop | app → device | ACK | pusty |
+| `0x0E` | EcgOnline | app → device | ACK + Online Info | pusty; wymaga Init; **blokowane** gdy Offline w toku |
+| `0x0F` | EcgOnlineInfo | device → app | — | FW Wojtek: `u16 avm \| u8 channels` (bez kodów SCP; `size=0`) |
+| `0x10` | EcgOnlineData | device → app | — | FW Wojtek: `u16 avm \| u8 channels \| raw ADS` (10-bit, 3 ch); nie numer próbki |
+| `0x11` | EcgOnlineStop | app → device | ACK | pusty; Offline przy starcie gasi Online |
 | `0x12` | End | app → device | ACK; koniec sesji | pusty |
 | `0x13` | Get | app → device | → GetAns | ID informacji |
 | `0x14` | GetAns | device → app | — | ID + wartość |

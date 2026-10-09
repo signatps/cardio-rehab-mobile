@@ -17,7 +17,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import pl.cardioscp.rehab.bluetooth.protocol.CommandFactory
 import pl.cardioscp.rehab.bluetooth.protocol.EcgOfflineCreateOrchestrator
-import pl.cardioscp.rehab.bluetooth.protocol.EcgOnlineAcquireOrchestrator
+import pl.cardioscp.rehab.bluetooth.protocol.EcgOnlineSessionOrchestrator
 import pl.cardioscp.rehab.bluetooth.protocol.ElectrodeStatus
 import pl.cardioscp.rehab.bluetooth.protocol.FrameType
 import pl.cardioscp.rehab.bluetooth.protocol.PayloadCodec
@@ -26,21 +26,23 @@ import pl.cardioscp.rehab.bluetooth.protocol.PulseScenarioOrchestrator
 import pl.cardioscp.rehab.bluetooth.protocol.ScenarioEvent
 import pl.cardioscp.rehab.bluetooth.protocol.ScpDownloadOrchestrator
 import pl.cardioscp.rehab.bluetooth.protocol.SequenceGenerator
+import pl.cardioscp.rehab.scp.MinimalScpWriter
 import pl.cardioscp.rehab.session.LiveEcgBuffer
 import pl.cardioscp.rehab.session.LiveEcgSnapshot
+import pl.cardioscp.rehab.session.SessionEcgTape
 
 /**
  * Runs documented SPP scenarios over a live [EhoMiniDeviceClient] link.
  * Shares one [SequenceGenerator] for the lifetime of the BT session.
  *
- * Prefer suspend helpers [runEcgOfflineCreate], [runScpDownload], [runPulseFor]
- * from the rehab session — they wait for real Finished/Failed (no StateFlow race).
+ * Offline: [runEcgOfflineCreate] + [runScpDownload].
+ * Online: [startOnlineSession] → taśma / fragmenty → [stopOnlineSession] (bez Offline).
  */
 class ProtocolSessionController(
     private val client: EhoMiniDeviceClient,
     private val scope: CoroutineScope,
 ) {
-    enum class Scenario { PULSE, ECG_OFFLINE_CREATE, ECG_ONLINE_ACQUIRE, SCP_DOWNLOAD }
+    enum class Scenario { PULSE, ECG_OFFLINE_CREATE, ECG_ONLINE_SESSION, SCP_DOWNLOAD }
 
     sealed interface Status {
         data object Idle : Status
@@ -72,18 +74,23 @@ class ProtocolSessionController(
     private val _liveEcg = MutableStateFlow(liveEcgBuffer.snapshot())
     val liveEcg: StateFlow<LiveEcgSnapshot> = _liveEcg.asStateFlow()
 
+    private val sessionTape = SessionEcgTape(samplingHz = 250)
+    val onlineSessionActive: Boolean
+        get() = onlineSessionOrch?.phase == EcgOnlineSessionOrchestrator.Phase.STREAMING
+
     private val sequences = SequenceGenerator()
     private val commands = CommandFactory(sequences)
     private val scenarioMutex = Mutex()
 
     private var pulseOrch: PulseScenarioOrchestrator? = null
     private var ecgOrch: EcgOfflineCreateOrchestrator? = null
-    private var onlineOrch: EcgOnlineAcquireOrchestrator? = null
+    private var onlineSessionOrch: EcgOnlineSessionOrchestrator? = null
     private var scpOrch: ScpDownloadOrchestrator? = null
     private var collectJob: Job? = null
     private var electrodeListenJob: Job? = null
     private var electrodePollJob: Job? = null
     private var activeOutcome: CompletableDeferred<Status>? = null
+    private var onlineStartedAtMs: Long = 0L
 
     init {
         electrodeListenJob = scope.launch(Dispatchers.IO) {
@@ -174,9 +181,12 @@ class ProtocolSessionController(
                 prepareDevice()
                 liveEcgBuffer.reset()
                 publishLiveEcg()
+                check(!onlineSessionActive) {
+                    "Sesja Online aktywna — Offline tylko w trybie Offline (zatrzymaj Online)."
+                }
                 val orch = EcgOfflineCreateOrchestrator(commands = commands)
                 ecgOrch = orch
-                onlineOrch = null
+                onlineSessionOrch = null
                 pulseOrch = null
                 scpOrch = null
                 val outcome = CompletableDeferred<Status>()
@@ -210,49 +220,105 @@ class ProtocolSessionController(
         }
 
     /**
-     * Init → ECG Online + Offline → strumień próbek (liveEcg) → Offline Done → Online Stop → End.
-     * SCP zostaje na urządzeniu (jak Offline). Gdy FW nie obsługuje Online — Offline i tak kończy SCP.
+     * Start ciągłej sesji Online (raz na sesję rehab). Bez Offline na urządzeniu.
+     * Próbki → [liveEcg] + taśma; fragmenty: [captureOnlineFragment].
      */
-    suspend fun runEcgOnlineAcquire(userId: String, totalSeconds: Int = 10) =
-        withContext(Dispatchers.IO) {
-            scenarioMutex.withLock {
-                prepareDevice()
-                liveEcgBuffer.reset()
-                publishLiveEcg()
-                val orch = EcgOnlineAcquireOrchestrator(commands = commands)
-                onlineOrch = orch
-                ecgOrch = null
-                pulseOrch = null
-                scpOrch = null
-                val outcome = CompletableDeferred<Status>()
-                activeOutcome = outcome
-                _status.value = Status.Running(Scenario.ECG_ONLINE_ACQUIRE)
-                collectJob?.cancel()
-                collectJob = scope.launch(Dispatchers.IO) {
-                    client.incomingFrames.collect { frame ->
-                        noteDeviceAlerts(frame)
-                        dispatch(orch.onFrame(frame))
-                    }
+    suspend fun startOnlineSession() = withContext(Dispatchers.IO) {
+        scenarioMutex.withLock {
+            if (onlineSessionActive) return@withLock
+            prepareDevice()
+            liveEcgBuffer.reset()
+            sessionTape.reset()
+            publishLiveEcg()
+            val orch = EcgOnlineSessionOrchestrator(commands = commands)
+            onlineSessionOrch = orch
+            ecgOrch = null
+            pulseOrch = null
+            scpOrch = null
+            _status.value = Status.Running(Scenario.ECG_ONLINE_SESSION)
+            collectJob?.cancel()
+            collectJob = scope.launch(Dispatchers.IO) {
+                client.incomingFrames.collect { frame ->
+                    noteDeviceAlerts(frame)
+                    dispatch(orch.onFrame(frame))
                 }
-                dispatch(
-                    orch.start(
-                        EcgOnlineAcquireOrchestrator.Config(
-                            unixTimestampSeconds = System.currentTimeMillis() / 1000L,
-                            samplingHz = 250,
-                            pulseAverageSeconds = 10,
-                            lookbackSeconds = 0,
-                            totalSeconds = totalSeconds.coerceAtLeast(2),
-                            userId = userId,
-                        ),
-                    ),
-                )
-                val result = withTimeout((totalSeconds + 60L) * 1_000) { outcome.await() }
-                liveEcgBuffer.clearStreaming()
-                publishLiveEcg()
-                activeOutcome = null
-                if (result is Status.Failed) error(result.reason)
             }
+            dispatch(
+                orch.start(
+                    EcgOnlineSessionOrchestrator.Config(
+                        unixTimestampSeconds = System.currentTimeMillis() / 1000L,
+                        samplingHz = 250,
+                        pulseAverageSeconds = 10,
+                        clearBuffer = true,
+                    ),
+                ),
+            )
+            onlineStartedAtMs = System.currentTimeMillis()
+            val deadline = System.currentTimeMillis() + 8_000L
+            while (System.currentTimeMillis() < deadline) {
+                if (orch.isUnsupported) error("ECG Online niedostępne na tym firmware")
+                if (orch.isStreaming || sessionTape.availableSamples() > 0) break
+                delay(50)
+            }
+            if (orch.isUnsupported) error("ECG Online niedostępne na tym firmware")
         }
+    }
+
+    /**
+     * Czeka [seconds] świeżego strumienia, wycina ostatnie [seconds] z taśmy
+     * i buduje SCP w aplikacji (bez komendy Offline).
+     */
+    suspend fun captureOnlineFragment(seconds: Int): ByteArray = withContext(Dispatchers.IO) {
+        val orch = onlineSessionOrch
+            ?: error("Brak sesji Online — wywołaj startOnlineSession()")
+        if (orch.isUnsupported) error("ECG Online niedostępne")
+        val secs = seconds.coerceAtLeast(2)
+        val need = secs * 250
+        val mark = sessionTape.availableSamples()
+        val markDeadline = System.currentTimeMillis() + secs * 1_000L
+        while (System.currentTimeMillis() < markDeadline) {
+            if (orch.isUnsupported || orch.phase == EcgOnlineSessionOrchestrator.Phase.FAILED) {
+                error("Strumień Online przerwany")
+            }
+            delay(50)
+        }
+        val grown = sessionTape.availableSamples() - mark
+        val fragment = sessionTape.cutLastSeconds(secs)
+            ?: error("Brak próbek Online do fragmentu (dostępne=${sessionTape.availableSamples()})")
+        if (grown < need / 2 && fragment.sampleCount < need / 2) {
+            error("Za mało próbek Online (${fragment.sampleCount}) na fragment ${secs}s")
+        }
+        MinimalScpWriter.fromFragment(fragment)
+    }
+
+    /** Puls podczas aktywnej sesji Online (bez End). */
+    suspend fun runPulseDuringOnline(durationSec: Int) = withContext(Dispatchers.IO) {
+        val orch = onlineSessionOrch ?: error("Brak sesji Online")
+        scenarioMutex.withLock {
+            _lastPulseBpm.value = null
+            _pulseSampleCount.value = 0
+            dispatch(orch.startPulse(intervalTenths = 10))
+            delay(durationSec.coerceAtLeast(1) * 1_000L)
+            dispatch(orch.stopPulse())
+            delay(400)
+        }
+    }
+
+    /** Koniec sesji Online — Stop → End. */
+    suspend fun stopOnlineSession() = withContext(Dispatchers.IO) {
+        scenarioMutex.withLock {
+            val orch = onlineSessionOrch ?: return@withLock
+            val outcome = CompletableDeferred<Status>()
+            activeOutcome = outcome
+            dispatch(orch.stopSession())
+            withTimeoutOrNull(15_000) { outcome.await() }
+            activeOutcome = null
+            onlineSessionOrch = null
+            liveEcgBuffer.clearStreaming()
+            publishLiveEcg()
+            _status.value = Status.Idle
+        }
+    }
 
     /** Init → GetScp* → pełny plik → ScpDone → End. */
     suspend fun runScpDownload(): ByteArray =
@@ -344,7 +410,7 @@ class ProtocolSessionController(
         collectJob = null
         pulseOrch = null
         ecgOrch = null
-        onlineOrch = null
+        onlineSessionOrch = null
         scpOrch = null
         liveEcgBuffer.clearStreaming()
         publishLiveEcg()
@@ -417,19 +483,24 @@ class ProtocolSessionController(
                     _status.value = Status.Info("Pobrano cały plik SCP (${event.bytes.size} B)")
                 }
                 is ScenarioEvent.EcgOnlineInfoEvent -> {
-                    val labels = event.info.leadCodes.map { PayloadCodec.scpLeadLabel(it) }
+                    val labels = PayloadCodec.onlineLeadLabels(event.info)
                     liveEcgBuffer.onInfo(labels)
+                    sessionTape.onInfo(labels, event.info.avmNanoVolts)
                     publishLiveEcg()
                 }
                 is ScenarioEvent.EcgOnlineSamples -> {
                     liveEcgBuffer.append(event.leadLabels, event.samplesMv)
+                    val raw = event.samplesRaw
+                    if (raw != null) {
+                        sessionTape.append(event.leadLabels, raw, event.avmNanoVolts)
+                    }
                     publishLiveEcg()
                 }
                 ScenarioEvent.EcgOnlineUnsupported -> {
                     liveEcgBuffer.markUnsupported()
                     publishLiveEcg()
                     _status.value = Status.Info(
-                        "ECG Online niedostępne na tym FW — zapis Offline/SCP bez podglądu",
+                        "ECG Online niedostępne na tym FW",
                     )
                 }
                 is ScenarioEvent.Info -> _status.value = Status.Info(event.message)

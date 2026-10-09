@@ -17,14 +17,17 @@ sealed interface ScenarioEvent {
     }
     /** Konfiguracja strumienia ECG Online (0x0F). */
     data class EcgOnlineInfoEvent(val info: PayloadCodec.EcgOnlineInfo) : ScenarioEvent
-    /** Paczka próbek ECG Online (0x10), już w mV per kanał. */
+    /** Paczka próbek ECG Online (0x10). */
     data class EcgOnlineSamples(
         val leadLabels: List<String>,
         /** Kolejne próbki czasu; każdy wiersz = wartości mV dla leadLabels. */
         val samplesMv: Array<DoubleArray>,
+        /** Surowce signed (do taśmy sesji / SCP); null gdy niedostępne. */
+        val samplesRaw: Array<ShortArray>? = null,
+        val avmNanoVolts: Int = 7100,
         val firstSampleIndex: Int,
     ) : ScenarioEvent
-    /** Urządzenie nie obsługuje ECG Online — kontynuujemy Offline/SCP. */
+    /** Urządzenie nie obsługuje ECG Online. */
     data object EcgOnlineUnsupported : ScenarioEvent
     data class Failed(val reason: String) : ScenarioEvent
     data object Finished : ScenarioEvent

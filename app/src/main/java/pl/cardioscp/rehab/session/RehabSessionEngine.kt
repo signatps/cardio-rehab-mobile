@@ -18,8 +18,9 @@ import pl.cardioscp.rehab.scp.ScpRecordingStore
 
 /**
  * Sesja rehabilitacji:
- * EKG (Init→Offline→SCP) → ciśnienie → [waga] → ankieta → dopuszczenie 10 s →
- * EKG spoczynkowe treningu → ×N (ćwiczenie+puls → EKG szczyt → odpoczynek) → podsumowanie.
+ * EKG kwalifikacyjne → ciśnienie → [waga] → ankieta → dopuszczenie →
+ * trening (profil interwałowy: spoczynek / wysiłek / szczyt / odpoczynek) → podsumowanie.
+ * Offline: każde EKG = Offline+GetScp. Online: ciągły strumień, fragmenty z taśmy.
  */
 class RehabSessionEngine(
     private val scope: CoroutineScope,
@@ -39,6 +40,7 @@ class RehabSessionEngine(
     private var trainingJob: Job? = null
     private var admissionJob: Job? = null
     private var pulseWatchJob: Job? = null
+    private var onlineLiveJob: Job? = null
     @Volatile private var skipCurrentPhase: Boolean = false
     @Volatile private var abortTraining: Boolean = false
 
@@ -60,15 +62,24 @@ class RehabSessionEngine(
     }
 
     fun cancel() {
+        val mode = _state.value?.ecgMode
         abortTraining = true
         trainingJob?.cancel()
         admissionJob?.cancel()
         pulseWatchJob?.cancel()
+        onlineLiveJob?.cancel()
         trainingJob = null
         admissionJob = null
         pulseWatchJob = null
+        onlineLiveJob = null
         bleMeasure.release()
-        sessionController.stop()
+        scope.launch {
+            if (mode == EcgAcquisitionMode.ONLINE) {
+                runCatching { sessionController.stopOnlineSession() }
+            } else {
+                sessionController.stop()
+            }
+        }
         _state.value = null
     }
 
@@ -197,7 +208,17 @@ class RehabSessionEngine(
         }
         val s = _state.value ?: return
         if (s.includeWeight) {
-            startWeightMeasure()
+            // Krótka przerwa — GATT ciśnienia musi się domknąć zanim skan wagi (Samsung dual-mode).
+            scope.launch {
+                delay(600)
+                val cur = _state.value ?: return@launch
+                if (cur.includeWeight && cur.vitals.weight == null &&
+                    cur.step != RehabStep.SURVEY &&
+                    cur.step != RehabStep.SUMMARY
+                ) {
+                    startWeightMeasure()
+                }
+            }
         } else {
             update { it.copy(step = RehabStep.SURVEY) }
         }
@@ -277,7 +298,7 @@ class RehabSessionEngine(
             update { it.copy(error = "Brak połączenia EHO-Mini — wznów SPP przed treningiem.") }
             return
         }
-        val timeline = TrainingPlanner.interval(s.trainingPlan)
+        val timeline = TrainingPlanner.timeline(s.trainingPlan)
         val first = timeline.phases.first()
         abortTraining = false
         update {
@@ -340,14 +361,26 @@ class RehabSessionEngine(
             }
         }
         pulseWatchJob?.cancel()
-        sessionController.stop()
+        finishProtocolAfterTraining()
         update {
             it.copy(
                 step = RehabStep.SUMMARY,
                 training = null,
                 busy = false,
+                liveEcg = null,
                 statusMessage = if (abortTraining) "Trening przerwany" else "Trening zakończony",
             )
+        }
+    }
+
+    private suspend fun finishProtocolAfterTraining() {
+        val mode = _state.value?.ecgMode ?: EcgAcquisitionMode.OFFLINE
+        if (mode == EcgAcquisitionMode.ONLINE) {
+            runCatching { sessionController.stopOnlineSession() }
+            onlineLiveJob?.cancel()
+            onlineLiveJob = null
+        } else {
+            sessionController.stop()
         }
     }
 
@@ -380,7 +413,7 @@ class RehabSessionEngine(
         }
         val pulseJob = scope.launch {
             runCatching {
-                sessionController.runPulseFor(phase.durationSec)
+                runPulseForPhase(phase.durationSec)
             }.onFailure { e ->
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 update {
@@ -415,12 +448,12 @@ class RehabSessionEngine(
         }
         if (skipCurrentPhase || abortTraining) {
             pulseJob.cancel()
-            sessionController.stop()
+            stopPulseOnly()
         }
         runCatching { pulseJob.join() }
         pulseWatchJob?.cancel()
         pulseWatchJob = null
-        sessionController.stop()
+        stopPulseOnly()
         val samples = synchronized(bpmSamples) { bpmSamples.toList() }
         val summary = CycleHrSummary.fromSamples(phase.cycle, limit, samples)
         update {
@@ -465,7 +498,7 @@ class RehabSessionEngine(
         }
         val pulseJob = scope.launch {
             runCatching {
-                sessionController.runPulseFor(phase.durationSec)
+                runPulseForPhase(phase.durationSec)
             }.onFailure { e ->
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 update {
@@ -494,13 +527,30 @@ class RehabSessionEngine(
         }
         if (skipCurrentPhase || abortTraining) {
             pulseJob.cancel()
-            sessionController.stop()
+            stopPulseOnly()
         }
         runCatching { pulseJob.join() }
         pulseWatchJob?.cancel()
         pulseWatchJob = null
-        sessionController.stop()
+        stopPulseOnly()
         delay(200)
+    }
+
+    private suspend fun runPulseForPhase(durationSec: Int) {
+        if ((_state.value?.ecgMode ?: EcgAcquisitionMode.OFFLINE) == EcgAcquisitionMode.ONLINE) {
+            sessionController.runPulseDuringOnline(durationSec)
+        } else {
+            sessionController.runPulseFor(durationSec)
+        }
+    }
+
+    /** Offline: stop scenariusza pulsu. Online: nie gasimy ciągłego Online. */
+    private fun stopPulseOnly() {
+        if ((_state.value?.ecgMode ?: EcgAcquisitionMode.OFFLINE) == EcgAcquisitionMode.ONLINE) {
+            // Puls stop już w runPulseDuringOnline; nie ruszamy sesji Online.
+        } else {
+            sessionController.stop()
+        }
     }
 
     private suspend fun runTimedPhase(phase: TrainingPhase) {
@@ -602,7 +652,11 @@ class RehabSessionEngine(
         )
     }
 
-    /** Init → Offline[/Online] → Done → End → Init → GetScp → zapis. */
+    /**
+     * Offline: Init → Offline → Done → End → GetScp → zapis.
+     * Online: upewnij się, że sesja Online trwa; poczekaj [totalSeconds];
+     * wytnij fragment z taśmy → SCP w aplikacji (bez Offline / GetScp z urządzenia).
+     */
     private suspend fun acquireEcg(label: String, totalSeconds: Int): Result<ScpRecording> {
         return runCatching {
             if (deviceClient.connectionState.value !is EhoMiniConnectionState.Connected) {
@@ -615,46 +669,49 @@ class RehabSessionEngine(
             }
             val userId = userIdProvider()
             val mode = _state.value?.ecgMode ?: EcgAcquisitionMode.OFFLINE
-            val liveJob = if (mode == EcgAcquisitionMode.ONLINE) {
-                scope.launch {
-                    sessionController.liveEcg.collect { snap ->
-                        update { it.copy(liveEcg = snap) }
-                    }
-                }
-            } else {
-                null
-            }
-            try {
-                when (mode) {
-                    EcgAcquisitionMode.ONLINE -> {
-                        update {
-                            it.copy(
-                                statusMessage = "$label: EKG Online + Offline (${totalSeconds}s)…",
-                                liveEcg = sessionController.liveEcg.value,
-                            )
-                        }
-                        sessionController.runEcgOnlineAcquire(userId, totalSeconds = totalSeconds)
-                    }
-                    EcgAcquisitionMode.OFFLINE -> {
-                        update {
-                            it.copy(
-                                statusMessage = "$label: Init + EKG Offline (${totalSeconds}s)…",
-                                liveEcg = null,
-                            )
-                        }
-                        sessionController.runEcgOfflineCreate(userId, totalSeconds = totalSeconds)
-                    }
-                }
-            } finally {
-                liveJob?.cancel()
-            }
-            update { it.copy(statusMessage = "$label: pobieranie SCP…") }
-            val bytes = sessionController.runScpDownload()
             val serial = (deviceClient.connectionState.value as? EhoMiniConnectionState.Connected)
                 ?.deviceName?.takeLast(6)
-            recordingStore.saveComplete(bytes, serial)
+            when (mode) {
+                EcgAcquisitionMode.ONLINE -> {
+                    ensureOnlineSessionRunning()
+                    update {
+                        it.copy(
+                            statusMessage = "$label: fragment Online (${totalSeconds}s)…",
+                            liveEcg = sessionController.liveEcg.value,
+                        )
+                    }
+                    val bytes = sessionController.captureOnlineFragment(totalSeconds)
+                    recordingStore.saveComplete(bytes, serial)
+                }
+                EcgAcquisitionMode.OFFLINE -> {
+                    update {
+                        it.copy(
+                            statusMessage = "$label: Init + EKG Offline (${totalSeconds}s)…",
+                            liveEcg = null,
+                        )
+                    }
+                    sessionController.runEcgOfflineCreate(userId, totalSeconds = totalSeconds)
+                    update { it.copy(statusMessage = "$label: pobieranie SCP…") }
+                    val bytes = sessionController.runScpDownload()
+                    recordingStore.saveComplete(bytes, serial)
+                }
+            }
         }.recoverCatching { e ->
             throw IllegalStateException("$label: ${e.message}", e)
+        }
+    }
+
+    private suspend fun ensureOnlineSessionRunning() {
+        if (!sessionController.onlineSessionActive) {
+            sessionController.startOnlineSession()
+        }
+        if (onlineLiveJob?.isActive != true) {
+            onlineLiveJob?.cancel()
+            onlineLiveJob = scope.launch {
+                sessionController.liveEcg.collect { snap ->
+                    update { it.copy(liveEcg = snap) }
+                }
+            }
         }
     }
 
@@ -699,11 +756,12 @@ class RehabSessionEngine(
             skipCurrentPhase = true
             trainingJob?.cancel()
             pulseWatchJob?.cancel()
-            sessionController.stop()
+            scope.launch { finishProtocolAfterTraining() }
             update {
                 it.copy(
                     step = RehabStep.SUMMARY,
                     training = null,
+                    liveEcg = null,
                     statusMessage = "Trening przerwany (zdarzenie EKG)",
                 )
             }

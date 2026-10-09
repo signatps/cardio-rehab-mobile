@@ -128,68 +128,165 @@ object PayloadCodec {
         const val LOOKBACK_UNAVAILABLE = 0x05
     }
 
-    /** ECG Online Info 0x0F — AVM (×10⁻⁹ V), liczba kanałów, kody SCP odprowadzeń. */
+    /**
+     * ECG Online Info 0x0F — FW Wojtek (`ecg_online_info`):
+     * `uint16 avm | uint8 channels | [opcjonalne kody SCP…]`.
+     * Aktualny soft wysyła `size=0` (bez kodów odprowadzeń).
+     */
     data class EcgOnlineInfo(
         val avmNanoVolts: Int,
         val channelCount: Int,
         val leadCodes: IntArray,
+        val bits: Int = 10,
     ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (other !is EcgOnlineInfo) return false
             return avmNanoVolts == other.avmNanoVolts &&
                 channelCount == other.channelCount &&
+                bits == other.bits &&
                 leadCodes.contentEquals(other.leadCodes)
         }
 
         override fun hashCode(): Int =
-            31 * (31 * avmNanoVolts + channelCount) + leadCodes.contentHashCode()
+            31 * (31 * (31 * avmNanoVolts + channelCount) + bits) + leadCodes.contentHashCode()
     }
 
-    /** ECG Online Data 0x10 — numer pierwszej próbki + int16 interleaved. */
+    /**
+     * ECG Online Data 0x10 — FW Wojtek (`ecg_online_data`):
+     * `uint16 avm | uint8 channels | raw ADS frame` (nie numer próbki + int16).
+     */
     data class EcgOnlineData(
-        val firstSampleIndex: Int,
+        val avmNanoVolts: Int,
+        val channelCount: Int,
+        /** Interleaved lead samples (I, II, V1/Vx, …), już ze znakiem (po odjęciu mid-scale). */
         val samples: ShortArray,
     ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (other !is EcgOnlineData) return false
-            return firstSampleIndex == other.firstSampleIndex && samples.contentEquals(other.samples)
+            return avmNanoVolts == other.avmNanoVolts &&
+                channelCount == other.channelCount &&
+                samples.contentEquals(other.samples)
         }
 
-        override fun hashCode(): Int = 31 * firstSampleIndex + samples.contentHashCode()
+        override fun hashCode(): Int =
+            31 * (31 * avmNanoVolts + channelCount) + samples.contentHashCode()
     }
+
+    /** Nagłówek ramki ADS w `TMP_1_DATA` — jak `process_ecg` w `scp.c` (20 B). */
+    const val ADS_FRAME_HEADER_BYTES: Int = 20
+
+    private const val ZERO_10_BIT = 0x200
+    private const val R10_MASK = 0x3FF
 
     fun parseEcgOnlineInfo(payload: ByteArray): EcgOnlineInfo {
         require(payload.size >= 3) { "Online Info too short: ${payload.size}" }
         val avm = (payload[0].toInt() and 0xFF) or ((payload[1].toInt() and 0xFF) shl 8)
         val n = payload[2].toInt() and 0xFF
         require(n > 0) { "Online Info: 0 channels" }
-        require(payload.size >= 3 + n) { "Online Info truncated for $n leads" }
-        val leads = IntArray(n) { i -> payload[3 + i].toInt() and 0xFF }
+        val leadBytes = payload.size - 3
+        val leads = if (leadBytes >= n) {
+            IntArray(n) { i -> payload[3 + i].toInt() and 0xFF }
+        } else {
+            IntArray(0)
+        }
         return EcgOnlineInfo(avmNanoVolts = avm, channelCount = n, leadCodes = leads)
     }
 
-    fun parseEcgOnlineData(payload: ByteArray, channelCount: Int): EcgOnlineData {
-        require(channelCount > 0)
-        require(payload.size >= 2) { "Online Data too short" }
-        val first = (payload[0].toInt() and 0xFF) or ((payload[1].toInt() and 0xFF) shl 8)
-        val sampleBytes = payload.size - 2
-        require(sampleBytes % 2 == 0) { "Online Data odd sample byte length" }
-        require(sampleBytes % (2 * channelCount) == 0) {
-            "Online Data length not divisible by channel count"
+    /**
+     * Parsuje 0x10: nagłówek AVM+channels, potem surowa ramka ADS (10-bit, 2/3 ch).
+     * [channelCountHint] z Online Info — używany gdy pole w pakiecie jest uszkodzone.
+     */
+    fun parseEcgOnlineData(
+        payload: ByteArray,
+        channelCountHint: Int = 3,
+        bits: Int = 10,
+    ): EcgOnlineData {
+        require(payload.size >= 3) { "Online Data too short: ${payload.size}" }
+        val avm = (payload[0].toInt() and 0xFF) or ((payload[1].toInt() and 0xFF) shl 8)
+        val channels = (payload[2].toInt() and 0xFF).let { c ->
+            if (c in 1..3) c else channelCountHint.coerceIn(1, 3)
         }
-        val nShorts = sampleBytes / 2
-        val samples = ShortArray(nShorts)
-        var o = 2
-        for (i in 0 until nShorts) {
-            val lo = payload[o].toInt() and 0xFF
-            val hi = payload[o + 1].toInt() and 0xFF
-            samples[i] = ((hi shl 8) or lo).toShort()
-            o += 2
-        }
-        return EcgOnlineData(firstSampleIndex = first, samples = samples)
+        val raw = payload.copyOfRange(3, payload.size)
+        val samples = decodeAdsRawSamples(raw, channels, bits)
+        return EcgOnlineData(avmNanoVolts = avm, channelCount = channels, samples = samples)
     }
+
+    /**
+     * Dekoduje surową ramkę z `bt_send_ecg_online_samples` → próbki signed per kanał
+     * w kolejności I, II[, Vx] (jak `parse_ecg_data` w `scp.c`, res=10).
+     */
+    fun decodeAdsRawSamples(
+        raw: ByteArray,
+        channelCount: Int,
+        bits: Int = 10,
+    ): ShortArray {
+        require(channelCount in 1..3)
+        if (raw.size <= ADS_FRAME_HEADER_BYTES) return ShortArray(0)
+        var o = ADS_FRAME_HEADER_BYTES
+        val out = ArrayList<Short>((raw.size - o) / 2)
+        when {
+            bits == 10 && channelCount == 3 -> {
+                while (o + 4 <= raw.size) {
+                    var v = (raw[o].toInt() and 0xFF) or
+                        ((raw[o + 1].toInt() and 0xFF) shl 8) or
+                        ((raw[o + 2].toInt() and 0xFF) shl 16) or
+                        ((raw[o + 3].toInt() and 0xFF) shl 24)
+                    o += 4
+                    v = v ushr 2
+                    val vx = ((v and R10_MASK) - ZERO_10_BIT).toShort()
+                    v = v ushr 10
+                    val ii = ((v and R10_MASK) - ZERO_10_BIT).toShort()
+                    v = v ushr 10
+                    val i = ((v and R10_MASK) - ZERO_10_BIT).toShort()
+                    out.add(i)
+                    out.add(ii)
+                    out.add(vx)
+                }
+            }
+            bits == 10 && channelCount == 2 -> {
+                while (o + 3 <= raw.size) {
+                    var v = (raw[o].toInt() and 0xFF) or
+                        ((raw[o + 1].toInt() and 0xFF) shl 8) or
+                        ((raw[o + 2].toInt() and 0xFF) shl 16)
+                    o += 3
+                    v = v ushr 4
+                    val ii = ((v and R10_MASK) - ZERO_10_BIT).toShort()
+                    v = v ushr 10
+                    val i = ((v and R10_MASK) - ZERO_10_BIT).toShort()
+                    out.add(i)
+                    out.add(ii)
+                }
+            }
+            else -> {
+                // Fallback: int16 LE interleaved (starsze / hipotetyczne FW).
+                while (o + 2 * channelCount <= raw.size) {
+                    for (ch in 0 until channelCount) {
+                        val lo = raw[o].toInt() and 0xFF
+                        val hi = raw[o + 1].toInt() and 0xFF
+                        out.add(((hi shl 8) or lo).toShort())
+                        o += 2
+                    }
+                }
+            }
+        }
+        return out.toShortArray()
+    }
+
+    /** Domyślne etykiety gdy Online Info nie niesie kodów SCP (FW Wojtek). */
+    fun defaultOnlineLeadLabels(channelCount: Int): List<String> = when (channelCount) {
+        1 -> listOf("V1")
+        2 -> listOf("I", "II")
+        else -> listOf("I", "II", "V1")
+    }
+
+    fun onlineLeadLabels(info: EcgOnlineInfo): List<String> =
+        if (info.leadCodes.isNotEmpty()) {
+            info.leadCodes.map { scpLeadLabel(it) }
+        } else {
+            defaultOnlineLeadLabels(info.channelCount)
+        }
 
     /** Etykieta odprowadzenia SCP (`scp.h`: I=1, II=2, V1=3…). */
     fun scpLeadLabel(code: Int): String = when (code) {
@@ -208,7 +305,7 @@ object PayloadCodec {
         else -> "L$code"
     }
 
-    /** int16 × AVM(×10⁻⁹ V) → mV. */
+    /** Próbka signed × AVM(×10⁻⁹ V) → mV. */
     fun onlineSampleToMv(sample: Short, avmNanoVolts: Int): Double =
         sample.toInt() * (avmNanoVolts.toDouble() * 1e-6)
 }

@@ -159,7 +159,12 @@ class BleMeasureController(context: Context) {
                 bleHits.toList()
             }
         }
+        // Preferowane BDA: pokazuj inne urządzenia gdy już zaproponowano „inne”
+        // albo gdy trwa pomiar wagi (ważne w sesji rehab).
         if (preferredBleBda == null) return bleHits.toList()
+        if (bleOfferOtherDevices || measureType == VitalMeasureType.WEIGHT) {
+            return bleHits.toList()
+        }
         return emptyList()
     }
 
@@ -230,6 +235,11 @@ class BleMeasureController(context: Context) {
                             connectBle(preferredHit)
                             return@startScan
                         }
+                        // Nie blokuj listy — pokaż inne wagi (Charder/JPD) od razu.
+                        if (bleHits.any { !BleBda.sameAddress(it.address, preferred) }) {
+                            bleOfferOtherDevices = true
+                            bleStatus = "Brak ostatniej wagi — wybierz urządzenie z listy"
+                        }
                         return@startScan
                     }
                     if (autoConnectArmed) {
@@ -263,7 +273,15 @@ class BleMeasureController(context: Context) {
                     clearBleWaitCountdown()
                     autoConnectArmed = false
                     mainHandler.removeCallbacks(preferBdaOfferRunnable)
-                    presentPendingReading(reading, persistBdaFrom = null)
+                    // Zapamiętaj BDA z reklamy JPD — kolejne pomiary (także w sesji) łączą szybciej.
+                    val addr = reading.deviceAddress.takeIf { BleBda.isValid(it) }
+                        ?: bleHits.firstOrNull {
+                            it.resolvedKind == BleVitalKind.WEIGHT_IXELLENCE
+                        }?.address
+                    presentPendingReading(
+                        reading,
+                        persistBdaFrom = addr?.let { it to BleVitalKind.WEIGHT_IXELLENCE },
+                    )
                 },
             )
         }.onFailure { err ->
