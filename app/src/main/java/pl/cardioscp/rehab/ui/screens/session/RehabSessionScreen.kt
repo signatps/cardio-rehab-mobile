@@ -1,7 +1,9 @@
 package pl.cardioscp.rehab.ui.screens.session
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -60,9 +62,11 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -148,42 +152,65 @@ fun RehabSessionScreen(
                 )
             }
             RehabStep.VITALS_BP -> {
-                Text("Zmierz ciśnienie ciśnieniomierzem BLE.", style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.height(8.dp))
-                state.vitals.bloodPressure?.let {
-                    Text("Ostatni wynik: ${it.summary}", fontWeight = FontWeight.SemiBold)
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = viewModel::retryBpMeasure, modifier = Modifier.fillMaxWidth()) {
-                    Text("Uruchom pomiar ciśnienia")
-                }
-                OutlinedButton(
-                    onClick = viewModel::simulateBpMeasure,
-                    modifier = Modifier.fillMaxWidth(),
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("Symuluj wynik ciśnienia")
+                    CoachArt(
+                        resId = R.drawable.coach_bp,
+                        contentDescription = "Pomiar ciśnienia",
+                        size = 150.dp,
+                    )
+                    Text(
+                        "Zmierz ciśnienie ciśnieniomierzem BLE.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                    )
+                    state.vitals.bloodPressure?.let {
+                        Text("Ostatni wynik: ${it.summary}", fontWeight = FontWeight.SemiBold)
+                    }
+                    Button(onClick = viewModel::retryBpMeasure, modifier = Modifier.widthIn(min = 220.dp, max = 320.dp)) {
+                        Text("Uruchom pomiar ciśnienia")
+                    }
+                    OutlinedButton(
+                        onClick = viewModel::simulateBpMeasure,
+                        modifier = Modifier.widthIn(min = 220.dp, max = 320.dp),
+                    ) {
+                        Text("Symuluj wynik ciśnienia")
+                    }
                 }
             }
             RehabStep.VITALS_WEIGHT -> {
-                Text(
-                    "Niewydolność serca — zmierz masę ciała wagą BLE.",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Spacer(Modifier.height(8.dp))
-                state.vitals.weight?.let {
-                    Text("Ostatni wynik: ${it.summary}", fontWeight = FontWeight.SemiBold)
-                }
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = viewModel::retryWeightMeasure, modifier = Modifier.fillMaxWidth()) {
-                    Text("Uruchom pomiar wagi")
-                }
-                OutlinedButton(
-                    onClick = viewModel::simulateWeightMeasure,
-                    modifier = Modifier.fillMaxWidth(),
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("Symuluj wynik wagi")
+                    CoachArt(
+                        resId = R.drawable.coach_weight,
+                        contentDescription = "Pomiar wagi",
+                        size = 150.dp,
+                    )
+                    Text(
+                        "Niewydolność serca — zmierz masę ciała wagą BLE.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                    )
+                    state.vitals.weight?.let {
+                        Text("Ostatni wynik: ${it.summary}", fontWeight = FontWeight.SemiBold)
+                    }
+                    Button(onClick = viewModel::retryWeightMeasure, modifier = Modifier.widthIn(min = 220.dp, max = 320.dp)) {
+                        Text("Uruchom pomiar wagi")
+                    }
+                    OutlinedButton(
+                        onClick = viewModel::simulateWeightMeasure,
+                        modifier = Modifier.widthIn(min = 220.dp, max = 320.dp),
+                    ) {
+                        Text("Symuluj wynik wagi")
+                    }
+                    TextButton(onClick = viewModel::skipWeight) { Text("Pomiń wagę") }
                 }
-                TextButton(onClick = viewModel::skipWeight) { Text("Pomiń wagę") }
             }
             RehabStep.SURVEY -> SurveyContent(
                 answers = state.surveyAnswers,
@@ -191,36 +218,61 @@ fun RehabSessionScreen(
                 onSubmit = viewModel::submitSurvey,
             )
             RehabStep.SURVEY_DISQUALIFIED -> {
-                Text(
-                    "Na podstawie ankiety trening nie może się odbyć.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = viewModel::finishDisqualified, modifier = Modifier.fillMaxWidth()) {
-                    Text("Przejdź do podsumowania")
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    CoachArt(
+                        resId = R.drawable.coach_stop,
+                        contentDescription = "Trening wstrzymany",
+                        size = 150.dp,
+                    )
+                    Text(
+                        "Na podstawie ankiety trening nie może się odbyć.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                    )
+                    Button(
+                        onClick = viewModel::finishDisqualified,
+                        modifier = Modifier.widthIn(min = 220.dp, max = 320.dp),
+                    ) {
+                        Text("Przejdź do podsumowania")
+                    }
                 }
             }
             RehabStep.ADMISSION_WAIT -> {
-                Text(
-                    "Ankieta zaliczona. Oczekiwanie na dopuszczenie do treningu…",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Spacer(Modifier.height(12.dp))
                 val left = state.admissionRemainingSec ?: 0
-                Text(
-                    "%d s".format(left),
-                    style = MaterialTheme.typography.displaySmall,
-                    color = ProPlusColors.Navy,
-                    fontWeight = FontWeight.Bold,
-                )
-                LinearProgressIndicator(
-                    progress = {
-                        val total = state.trainingPlan.admissionWaitSec.coerceAtLeast(1)
-                        1f - left.toFloat() / total
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CoachArt(
+                        resId = R.drawable.coach_wait,
+                        contentDescription = "Dopuszczenie do treningu",
+                        size = 150.dp,
+                    )
+                    Text(
+                        "Ankieta zaliczona. Oczekiwanie na dopuszczenie do treningu…",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                    )
+                    Text(
+                        "%d s".format(left),
+                        style = MaterialTheme.typography.displaySmall,
+                        color = ProPlusColors.Navy,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    LinearProgressIndicator(
+                        progress = {
+                            val total = state.trainingPlan.admissionWaitSec.coerceAtLeast(1)
+                            1f - left.toFloat() / total
+                        },
+                        modifier = Modifier.fillMaxWidth(0.7f),
+                    )
+                }
             }
             RehabStep.TRAINING -> {
                 val t = state.training
@@ -324,6 +376,12 @@ private fun IntroContent(
                 },
             )
         }
+        CoachArt(
+            resId = R.drawable.coach_nordic,
+            contentDescription = "Nordic walking",
+            size = 120.dp,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        )
         Button(
             onClick = {
                 val limits = defaults.indices.map { idx ->
@@ -531,6 +589,11 @@ private fun SurveyContent(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            CoachArt(
+                resId = R.drawable.coach_survey,
+                contentDescription = "Ankieta",
+                size = 72.dp,
+            )
             Column(Modifier.weight(1f)) {
                 Text(
                     "Ankieta przed treningiem",
@@ -655,12 +718,11 @@ private fun TrainingPhaseContent(
     }
     val pictogramRes = when (visual) {
         TrainingCoachVisual.EXERCISE -> when (exerciseKind) {
-            ExerciseKind.NORDIC_WALKING -> R.drawable.ic_nordic_walking
+            ExerciseKind.NORDIC_WALKING -> R.drawable.coach_nordic
         }
-        TrainingCoachVisual.STOP_BEFORE_PEAK_ECG,
-        TrainingCoachVisual.HOLD_STILL_ECG,
-        -> R.drawable.ic_person_halt
-        TrainingCoachVisual.REST -> R.drawable.ic_rest_sit
+        TrainingCoachVisual.STOP_BEFORE_PEAK_ECG -> R.drawable.coach_stop
+        TrainingCoachVisual.HOLD_STILL_ECG -> R.drawable.coach_hold_still
+        TrainingCoachVisual.REST -> R.drawable.coach_rest
     }
     Column(
         Modifier
@@ -674,11 +736,10 @@ private fun TrainingPhaseContent(
             style = MaterialTheme.typography.labelLarge,
             color = ProPlusColors.Muted,
         )
-        Icon(
-            painter = painterResource(pictogramRes),
+        CoachArt(
+            resId = pictogramRes,
             contentDescription = headline,
-            tint = Color.Unspecified,
-            modifier = Modifier.size(132.dp),
+            size = 168.dp,
         )
         if (visual == TrainingCoachVisual.EXERCISE) {
             Text(
@@ -817,6 +878,21 @@ private fun TrainingPhaseContent(
 }
 
 @Composable
+private fun CoachArt(
+    @DrawableRes resId: Int,
+    contentDescription: String,
+    size: Dp = 150.dp,
+    modifier: Modifier = Modifier,
+) {
+    Image(
+        painter = painterResource(resId),
+        contentDescription = contentDescription,
+        modifier = modifier.size(size),
+        contentScale = ContentScale.Fit,
+    )
+}
+
+@Composable
 private fun EcgHoldStillPanel(
     subtitle: String,
     busy: Boolean,
@@ -832,11 +908,10 @@ private fun EcgHoldStillPanel(
             style = MaterialTheme.typography.labelLarge,
             color = ProPlusColors.Muted,
         )
-        Icon(
-            painter = painterResource(R.drawable.ic_person_halt),
+        CoachArt(
+            resId = R.drawable.coach_hold_still,
             contentDescription = "Pozostań nieruchomo",
-            tint = Color.Unspecified,
-            modifier = Modifier.size(120.dp),
+            size = 160.dp,
         )
         Text(
             "Pozostań nieruchomo — trwa zapis EKG",
@@ -868,12 +943,22 @@ private fun SummaryContent(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            "Podsumowanie sesji",
-            style = MaterialTheme.typography.titleSmall,
-            color = ProPlusColors.Navy,
-            fontWeight = FontWeight.SemiBold,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            CoachArt(
+                resId = R.drawable.coach_summary,
+                contentDescription = "Podsumowanie",
+                size = 64.dp,
+            )
+            Text(
+                "Podsumowanie sesji",
+                style = MaterialTheme.typography.titleSmall,
+                color = ProPlusColors.Navy,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
