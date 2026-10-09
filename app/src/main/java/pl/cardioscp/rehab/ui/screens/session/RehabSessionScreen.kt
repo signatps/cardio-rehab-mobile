@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.outlined.DirectionsRun
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.HourglassBottom
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.outlined.MonitorWeight
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -524,21 +526,43 @@ private fun SurveyContent(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         val allAnswered = DefaultRehabSurvey.questions.all { it.id in answers }
-        Text(
-            "Ankieta przed treningiem",
-            style = MaterialTheme.typography.titleSmall,
-            color = ProPlusColors.Navy,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            if (allAnswered) {
-                "Pogrubiona = odpowiedź kwalifikująca"
-            } else {
-                "Odpowiedz na wszystkie pytania"
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = ProPlusColors.Muted,
-        )
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Ankieta przed treningiem",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = ProPlusColors.Navy,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    if (allAnswered) {
+                        "Pogrubiona = odpowiedź kwalifikująca"
+                    } else {
+                        "Odpowiedz na wszystkie pytania"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ProPlusColors.Muted,
+                )
+            }
+            Button(
+                onClick = onSubmit,
+                enabled = allAnswered,
+                modifier = Modifier.height(36.dp),
+                contentPadding = ButtonDefaults.ContentPadding,
+            ) {
+                Icon(
+                    Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("Zatwierdź", style = MaterialTheme.typography.labelLarge)
+            }
+        }
         DefaultRehabSurvey.questions.forEach { q ->
             Row(
                 Modifier
@@ -571,15 +595,6 @@ private fun SurveyContent(
                     onClick = { onAnswer(q.id, false) },
                 )
             }
-        }
-        Button(
-            onClick = onSubmit,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .widthIn(min = 160.dp, max = 240.dp)
-                .padding(top = 4.dp),
-        ) {
-            Text("Wyślij ankietę", style = MaterialTheme.typography.labelLarge)
         }
     }
 }
