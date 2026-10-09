@@ -135,6 +135,21 @@ fun RehabSessionScreen(
         }
 
         StepHeader(state.step)
+        // Głosowe komunikaty główne przy zmianie kroku sesji.
+        LaunchedEffect(state.step, state.baselineEcgPhase) {
+            val phrase = when (state.step) {
+                RehabStep.ECG_BASELINE -> when (state.baselineEcgPhase) {
+                    BaselineEcgPhase.ACQUIRING -> "Trwa zapis EKG"
+                    else -> null
+                }
+                RehabStep.VITALS_BP -> "Wykonaj pomiar ciśnienia"
+                RehabStep.VITALS_WEIGHT -> "Wykonaj pomiar masy ciała"
+                RehabStep.SURVEY -> "Uzupełnij ankietę o stanie zdrowia"
+                RehabStep.SUMMARY -> "Sesja rehabilitacji zakończona"
+                else -> null
+            }
+            phrase?.let(viewModel::speakCoachMessage)
+        }
         state.statusMessage?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, color = ProPlusColors.Navy)
             Spacer(Modifier.height(8.dp))
@@ -308,6 +323,7 @@ fun RehabSessionScreen(
                         exerciseKind = state.trainingPlan.exerciseKind,
                         electrodes = electrodes,
                         onSpeakCue = viewModel::speakHeartRateCue,
+                        onSpeakCoach = viewModel::speakCoachMessage,
                         onComment = viewModel::reportEcgEvent,
                         onConfirmEndExercise = { viewModel.confirmEcgEvent(endTraining = false) },
                         onConfirmEndTraining = { viewModel.confirmEcgEvent(endTraining = true) },
@@ -751,6 +767,7 @@ private fun TrainingPhaseContent(
     exerciseKind: ExerciseKind,
     electrodes: ElectrodeStatus,
     onSpeakCue: (String) -> Unit,
+    onSpeakCoach: (String) -> Unit,
     onComment: () -> Unit,
     onConfirmEndExercise: () -> Unit,
     onConfirmEndTraining: () -> Unit,
@@ -771,6 +788,16 @@ private fun TrainingPhaseContent(
         TrainingCoachVisual.STOP_BEFORE_PEAK_ECG -> "Zatrzymaj się"
         TrainingCoachVisual.HOLD_STILL_ECG -> "Trwa zapis EKG"
         TrainingCoachVisual.REST -> "Odpocznij"
+    }
+    // Głos przy wejściu w fazę (raz na fazę / zmianę wizualną).
+    LaunchedEffect(visual, training.phase.index, training.acquiringEcg) {
+        val phrase = when (visual) {
+            TrainingCoachVisual.EXERCISE -> "Rozpocznij ćwiczenie"
+            TrainingCoachVisual.STOP_BEFORE_PEAK_ECG -> "Zatrzymaj się"
+            TrainingCoachVisual.HOLD_STILL_ECG -> "Trwa zapis EKG"
+            TrainingCoachVisual.REST -> "Odpocznij"
+        }
+        onSpeakCoach(phrase)
     }
     val pictogramRes = when (visual) {
         TrainingCoachVisual.EXERCISE -> when (exerciseKind) {

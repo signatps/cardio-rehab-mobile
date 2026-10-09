@@ -337,6 +337,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         voiceGreeting?.speak(phrase)
     }
 
+    /** Głosowe komunikaty faz sesji (ćwiczenie, EKG, pomiary, ankieta…). */
+    fun speakCoachMessage(phrase: String) {
+        val trimmed = phrase.trim()
+        if (trimmed.isEmpty()) return
+        voiceGreeting?.speak(trimmed)
+    }
+
     fun cancelRehabSession() = rehabEngine.cancel()
     fun beginBaselineEcg() = rehabEngine.beginBaselineEcg()
     fun retryBpMeasure() = rehabEngine.startBpMeasure()
