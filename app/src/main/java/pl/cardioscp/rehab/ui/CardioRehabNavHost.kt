@@ -99,6 +99,7 @@ fun CardioRehabNavHost(
                             todaySession = viewModel.todayArchivedSession(),
                             alertCount = viewModel.dashboardAlertCount(),
                             electrodes = electrodes,
+                            connection = state.connection,
                             onOpenRehab = {
                                 viewModel.requestOpenRehab {
                                     destination = AppDestination.REHAB.name
@@ -110,6 +111,7 @@ fun CardioRehabNavHost(
                             onMeasureBp = viewModel::measureBpStandalone,
                             onMeasureWeight = viewModel::measureWeightStandalone,
                             onSpeakWelcome = viewModel::speakDayPlanWelcome,
+                            onReconnectDevice = viewModel::onConnectClicked,
                         )
                         MeasurePopup(controller = viewModel.bleMeasure)
                     }

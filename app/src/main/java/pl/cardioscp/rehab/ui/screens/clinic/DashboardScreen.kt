@@ -18,6 +18,10 @@ import androidx.compose.material.icons.automirrored.outlined.TrendingDown
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.outlined.Bloodtype
+import androidx.compose.material.icons.automirrored.outlined.BluetoothSearching
+import androidx.compose.material.icons.outlined.Bluetooth
+import androidx.compose.material.icons.outlined.BluetoothConnected
+import androidx.compose.material.icons.outlined.BluetoothDisabled
 import androidx.compose.material.icons.outlined.CalendarViewDay
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Cancel
@@ -49,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import pl.cardioscp.rehab.ble.BpWho
+import pl.cardioscp.rehab.bluetooth.EhoMiniConnectionState
 import pl.cardioscp.rehab.bluetooth.protocol.ElectrodeStatus
 import pl.cardioscp.rehab.clinic.ClinicSnapshot
 import pl.cardioscp.rehab.clinic.DayPlanItem
@@ -70,6 +75,7 @@ fun DashboardScreen(
     todaySession: ArchivedRehabSession?,
     alertCount: Int = 0,
     electrodes: ElectrodeStatus = ElectrodeStatus.unknown(),
+    connection: EhoMiniConnectionState = EhoMiniConnectionState.Idle,
     onOpenRehab: () -> Unit,
     onOpenDayPlan: () -> Unit,
     onOpenMeds: () -> Unit,
@@ -77,6 +83,7 @@ fun DashboardScreen(
     onMeasureBp: () -> Unit = {},
     onMeasureWeight: () -> Unit = {},
     onSpeakWelcome: () -> Unit = {},
+    onReconnectDevice: () -> Unit = {},
 ) {
     LaunchedEffect(Unit) {
         onSpeakWelcome()
@@ -181,6 +188,10 @@ fun DashboardScreen(
                         )
                     }
                 }
+                DeviceConnectionStatusButton(
+                    connection = connection,
+                    onReconnect = onReconnectDevice,
+                )
             }
         }
 
@@ -605,6 +616,66 @@ private fun CycleHrChip(summary: CycleHrSummary) {
                 Text("$it", fontSize = 10.sp, color = tint, fontWeight = FontWeight.SemiBold)
             }
         }
+    }
+}
+
+@Composable
+private fun DeviceConnectionStatusButton(
+    connection: EhoMiniConnectionState,
+    onReconnect: () -> Unit,
+) {
+    val icon: ImageVector
+    val tint: Color
+    val description: String
+    val canReconnect: Boolean
+    when (connection) {
+        is EhoMiniConnectionState.Connected -> {
+            icon = Icons.Outlined.BluetoothConnected
+            tint = ProPlusColors.ResultGood
+            description = "EHO-Mini połączone: ${connection.deviceName}"
+            canReconnect = false
+        }
+        is EhoMiniConnectionState.Connecting -> {
+            icon = Icons.AutoMirrored.Outlined.BluetoothSearching
+            tint = ProPlusColors.Accent
+            description = "Łączenie z ${connection.deviceName}…"
+            canReconnect = false
+        }
+        EhoMiniConnectionState.LookingForBonded -> {
+            icon = Icons.AutoMirrored.Outlined.BluetoothSearching
+            tint = ProPlusColors.Accent
+            description = "Szukam sparowanego EHO-Mini…"
+            canReconnect = false
+        }
+        EhoMiniConnectionState.PermissionsRequired -> {
+            icon = Icons.Outlined.BluetoothDisabled
+            tint = ProPlusColors.ResultAlert
+            description = "Brak uprawnień Bluetooth — dotknij, aby połączyć"
+            canReconnect = true
+        }
+        is EhoMiniConnectionState.Error -> {
+            icon = Icons.Outlined.BluetoothDisabled
+            tint = ProPlusColors.ResultAlert
+            description = "Rozłączone: ${connection.message}. Dotknij, aby połączyć ponownie"
+            canReconnect = true
+        }
+        EhoMiniConnectionState.Idle -> {
+            icon = Icons.Outlined.Bluetooth
+            tint = ProPlusColors.Muted
+            description = "EHO-Mini rozłączone — dotknij, aby połączyć"
+            canReconnect = true
+        }
+    }
+    IconButton(
+        onClick = { if (canReconnect) onReconnect() },
+        enabled = true,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = description,
+            tint = tint,
+            modifier = Modifier.size(26.dp),
+        )
     }
 }
 
