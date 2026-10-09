@@ -78,7 +78,7 @@ class RehabSessionEngine(
                 step = RehabStep.ECG_BASELINE,
                 busy = true,
                 error = null,
-                statusMessage = "Init → EKG Offline → pobieranie SCP…",
+                statusMessage = "Pozostań nieruchomo — trwa zapis EKG",
             )
         }
         scope.launch {

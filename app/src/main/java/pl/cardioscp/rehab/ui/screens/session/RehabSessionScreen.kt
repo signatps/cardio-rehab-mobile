@@ -139,22 +139,11 @@ fun RehabSessionScreen(
                 },
             )
             RehabStep.ECG_BASELINE -> {
-                Text(
-                    "Inicjalizacja EHO-Mini, zapis EKG Offline i pobranie SCP…",
-                    style = MaterialTheme.typography.bodyLarge,
+                EcgHoldStillPanel(
+                    subtitle = "EKG kwalifikacyjne (przed sesją)",
+                    busy = state.busy,
+                    onRetry = viewModel::beginBaselineEcg,
                 )
-                if (state.busy) {
-                    Spacer(Modifier.height(12.dp))
-                    LinearProgressIndicator(
-                        progress = { 0f },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                } else {
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = viewModel::beginBaselineEcg, modifier = Modifier.fillMaxWidth()) {
-                        Text("Ponów EKG spoczynkowe")
-                    }
-                }
             }
             RehabStep.VITALS_BP -> {
                 Text("Zmierz ciśnienie ciśnieniomierzem BLE.", style = MaterialTheme.typography.bodyLarge)
@@ -534,6 +523,7 @@ private fun SurveyContent(
         Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        val allAnswered = DefaultRehabSurvey.questions.all { it.id in answers }
         Text(
             "Ankieta przed treningiem",
             style = MaterialTheme.typography.titleSmall,
@@ -541,7 +531,11 @@ private fun SurveyContent(
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            "Pogrubiona = kwalifikuje",
+            if (allAnswered) {
+                "Pogrubiona = odpowiedź kwalifikująca"
+            } else {
+                "Odpowiedz na wszystkie pytania"
+            },
             style = MaterialTheme.typography.labelSmall,
             color = ProPlusColors.Muted,
         )
@@ -567,13 +561,13 @@ private fun SurveyContent(
                 SurveyAnswerChip(
                     label = "TAK",
                     selected = yesSelected,
-                    preferred = q.safeAnswerYes,
+                    preferred = allAnswered && q.safeAnswerYes,
                     onClick = { onAnswer(q.id, true) },
                 )
                 SurveyAnswerChip(
                     label = "NIE",
                     selected = noSelected,
-                    preferred = !q.safeAnswerYes,
+                    preferred = allAnswered && !q.safeAnswerYes,
                     onClick = { onAnswer(q.id, false) },
                 )
             }
@@ -808,56 +802,125 @@ private fun TrainingPhaseContent(
 }
 
 @Composable
+private fun EcgHoldStillPanel(
+    subtitle: String,
+    busy: Boolean,
+    onRetry: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.labelLarge,
+            color = ProPlusColors.Muted,
+        )
+        Icon(
+            painter = painterResource(R.drawable.ic_person_halt),
+            contentDescription = "Pozostań nieruchomo",
+            tint = Color.Unspecified,
+            modifier = Modifier.size(120.dp),
+        )
+        Text(
+            "Pozostań nieruchomo — trwa zapis EKG",
+            style = MaterialTheme.typography.headlineSmall,
+            color = ProPlusColors.Navy,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+        )
+        if (busy) {
+            LinearProgressIndicator(
+                progress = { 0f },
+                modifier = Modifier.fillMaxWidth(0.7f),
+            )
+        } else {
+            Button(onClick = onRetry, modifier = Modifier.widthIn(min = 160.dp, max = 240.dp)) {
+                Text("Ponów EKG")
+            }
+        }
+    }
+}
+
+@Composable
 private fun SummaryContent(
     state: pl.cardioscp.rehab.session.RehabSessionState,
     onOpenEcg: (pl.cardioscp.rehab.session.SessionEcgEntry) -> Unit,
     onDone: () -> Unit,
 ) {
     Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("Podsumowanie sesji", style = MaterialTheme.typography.titleMedium, color = ProPlusColors.Navy)
-        state.vitals.bloodPressure?.let {
-            Text("Ciśnienie: ${it.summary}")
-            if (state.vitals.bloodPressureNote.isNotBlank()) {
-                Text("Notatka: ${state.vitals.bloodPressureNote}", style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        state.vitals.weight?.let {
-            Text("Waga: ${it.summary}")
-        }
-        val survey = DefaultRehabSurvey.evaluate(state.surveyAnswers)
-        Text("Ankieta: $survey")
-        HorizontalDivider()
         Text(
-            "Tętno w zapisach EKG (${state.ecgEntries.size})",
-            fontWeight = FontWeight.SemiBold,
+            "Podsumowanie sesji",
+            style = MaterialTheme.typography.titleSmall,
             color = ProPlusColors.Navy,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            state.vitals.bloodPressure?.let {
+                Text(
+                    "RR ${it.summary}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ProPlusColors.Navy,
+                )
+            }
+            state.vitals.weight?.let {
+                Text(
+                    "Masa ${it.summary}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ProPlusColors.Navy,
+                )
+            }
+            Text(
+                "Ankieta: ${DefaultRehabSurvey.evaluate(state.surveyAnswers)}",
+                style = MaterialTheme.typography.labelLarge,
+                color = ProPlusColors.Navy,
+            )
+        }
+        Text(
+            "Tętno EKG · pocz. / śr. / końc.",
+            style = MaterialTheme.typography.labelMedium,
+            color = ProPlusColors.Muted,
         )
         if (state.ecgEntries.isEmpty()) {
             Text("Brak zapisanych EKG w tej sesji.", color = ProPlusColors.Muted)
         } else {
-            state.ecgEntries.forEach { entry ->
-                val trend = remember(entry.recording.file.absolutePath, entry.hrAvgBpm) {
-                    if (entry.hrAvgBpm != null || entry.hrStartBpm != null) {
-                        EcgHrTrend(entry.hrStartBpm, entry.hrAvgBpm, entry.hrEndBpm)
-                    } else {
-                        EcgHrTrendEngine.fromRecording(entry.recording)
+            Column(
+                Modifier
+                    .weight(1f, fill = false)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                state.ecgEntries.forEach { entry ->
+                    val trend = remember(entry.recording.file.absolutePath, entry.hrAvgBpm) {
+                        if (entry.hrAvgBpm != null || entry.hrStartBpm != null) {
+                            EcgHrTrend(entry.hrStartBpm, entry.hrAvgBpm, entry.hrEndBpm)
+                        } else {
+                            EcgHrTrendEngine.fromRecording(entry.recording)
+                        }
                     }
+                    EcgHrTrendCard(
+                        title = EcgHrTrendEngine.shortLabel(entry.label),
+                        trend = trend,
+                        onClick = { onOpenEcg(entry) },
+                    )
                 }
-                EcgHrTrendCard(
-                    title = EcgHrTrendEngine.shortLabel(entry.label),
-                    trend = trend,
-                    onClick = { onOpenEcg(entry) },
-                )
             }
         }
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
-            Text("Zakończ")
+        Spacer(Modifier.weight(1f, fill = true))
+        Button(
+            onClick = onDone,
+            modifier = Modifier
+                .align(Alignment.CenterHorizontally)
+                .widthIn(min = 140.dp, max = 200.dp),
+        ) {
+            Text("Zakończ", style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -872,51 +935,39 @@ private fun EcgHrTrendCard(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, ProPlusColors.Line),
         color = ProPlusColors.Surface,
     ) {
-        Column(
-            Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                color = ProPlusColors.Navy,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                HrStat("Pocz.", trend.startBpm)
-                HrStat("Śr.", trend.avgBpm, emphasize = true)
-                HrStat("Końc.", trend.endBpm)
+            Column(Modifier.weight(0.34f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ProPlusColors.Navy,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+                Text(
+                    "${trend.startBpm ?: "—"} / ${trend.avgBpm ?: "—"} / ${trend.endBpm ?: "—"}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = ProPlusColors.Accent,
+                    fontWeight = FontWeight.Bold,
+                )
             }
             EcgHrMiniChart(
                 start = trend.startBpm,
                 avg = trend.avgBpm,
                 end = trend.endBpm,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(96.dp),
+                    .weight(0.66f)
+                    .height(36.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun HrStat(label: String, bpm: Int?, emphasize: Boolean = false) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = ProPlusColors.Muted)
-        Text(
-            bpm?.toString() ?: "—",
-            style = if (emphasize) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = ProPlusColors.Navy,
-        )
-        Text("bpm", style = MaterialTheme.typography.labelSmall, color = ProPlusColors.Muted)
     }
 }
 
@@ -941,22 +992,22 @@ private fun EcgHrMiniChart(
     val lineColor = ProPlusColors.Accent
     val gridColor = ProPlusColors.Line
     Canvas(modifier) {
-        val padL = 8.dp.toPx()
-        val padR = 8.dp.toPx()
-        val padT = 10.dp.toPx()
-        val padB = 18.dp.toPx()
+        val padL = 4.dp.toPx()
+        val padR = 4.dp.toPx()
+        val padT = 4.dp.toPx()
+        val padB = 4.dp.toPx()
         val w = size.width - padL - padR
         val h = size.height - padT - padB
         val xs = listOf(0.1f, 0.5f, 0.9f).map { padL + it * w }
-        // grid
+        // lekka siatka
         for (i in 0..2) {
             val y = padT + h * i / 2f
             drawLine(
                 color = gridColor,
                 start = Offset(padL, y),
                 end = Offset(padL + w, y),
-                strokeWidth = 1.dp.toPx(),
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)),
+                strokeWidth = 0.8.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
             )
         }
         val pts = values.mapIndexedNotNull { i, v ->
@@ -977,9 +1028,8 @@ private fun EcgHrMiniChart(
             }
         }
         pts.forEach { p ->
-            drawCircle(color = lineColor, radius = 5.dp.toPx(), center = p)
-            drawCircle(color = Color.White, radius = 2.5.dp.toPx(), center = p, style = Stroke(width = 0f))
-            drawCircle(color = Color.White, radius = 2.5.dp.toPx(), center = p)
+            drawCircle(color = lineColor, radius = 3.dp.toPx(), center = p)
+            drawCircle(color = Color.White, radius = 1.5.dp.toPx(), center = p)
         }
     }
 }
