@@ -18,16 +18,20 @@ import androidx.compose.material.icons.automirrored.outlined.TrendingDown
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.outlined.Bloodtype
+import androidx.compose.material.icons.outlined.CalendarViewDay
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.DirectionsBike
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Medication
+import androidx.compose.material.icons.outlined.MonitorHeart
 import androidx.compose.material.icons.outlined.MonitorWeight
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import pl.cardioscp.rehab.ble.BpWho
@@ -48,14 +53,12 @@ import pl.cardioscp.rehab.clinic.ClinicSnapshot
 import pl.cardioscp.rehab.clinic.DayPlanItem
 import pl.cardioscp.rehab.clinic.DayPlanKind
 import pl.cardioscp.rehab.clinic.DayPlanTone
-import pl.cardioscp.rehab.clinic.DoseStatus
 import pl.cardioscp.rehab.clinic.VitalKind
 import pl.cardioscp.rehab.clinic.WelcomePhrase
 import pl.cardioscp.rehab.session.ArchivedRehabSession
 import pl.cardioscp.rehab.session.CycleHrSummary
 import pl.cardioscp.rehab.session.CycleHrZoneOutcome
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
-import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 @Composable
@@ -68,7 +71,6 @@ fun DashboardScreen(
     onOpenDayPlan: () -> Unit,
     onOpenMeds: () -> Unit,
     onOpenAlerts: () -> Unit = onOpenMeds,
-    onOpenMeasurements: () -> Unit,
     onMeasureBp: () -> Unit = {},
     onMeasureWeight: () -> Unit = {},
     onSpeakWelcome: () -> Unit = {},
@@ -87,12 +89,14 @@ fun DashboardScreen(
     val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
     val bpColor = whoColorForBpText(bp?.valueText)
     val pulseColor = whoColorForPulse(livePulseBpm)
+    val measureItems = clinic.dayPlan.filter { it.kind != DayPlanKind.SESSION }
+    val sessionItems = clinic.dayPlan.filter { it.kind == DayPlanKind.SESSION }
 
     Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(
             Modifier.fillMaxWidth(),
@@ -209,33 +213,92 @@ fun DashboardScreen(
 
         Text(
             "Plan na dziś · ${clinic.planDate.format(java.time.format.DateTimeFormatter.ofPattern("d.MM.yyyy"))}",
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             color = ProPlusColors.Navy,
+            fontWeight = FontWeight.SemiBold,
         )
-        clinic.dayPlan.take(8).forEach { item ->
-            if (item.kind == DayPlanKind.SESSION) {
-                SessionPlanTile(
-                    item = item,
-                    archived = todaySession.takeIf { item.done },
-                    timeFmt = timeFmt,
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    "Pomiary / leki",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ProPlusColors.Muted,
                 )
-            } else {
-                DayPlanRow(item = item, timeFmt = timeFmt)
+                if (measureItems.isEmpty()) {
+                    Text("Brak pozycji", color = ProPlusColors.Muted, style = MaterialTheme.typography.bodySmall)
+                } else {
+                    measureItems.take(6).forEach { item ->
+                        CompactPlanTile(item = item, timeFmt = timeFmt)
+                    }
+                }
+            }
+            Column(
+                Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    "Sesje",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ProPlusColors.Muted,
+                )
+                if (sessionItems.isEmpty()) {
+                    Text("Brak sesji", color = ProPlusColors.Muted, style = MaterialTheme.typography.bodySmall)
+                } else {
+                    sessionItems.take(4).forEach { item ->
+                        SessionPlanTile(
+                            item = item,
+                            archived = todaySession.takeIf { item.done },
+                            timeFmt = timeFmt,
+                        )
+                    }
+                }
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onOpenRehab, modifier = Modifier.weight(1f)) {
-                Text("Start sesji rehab")
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedButton(
+                onClick = onOpenDayPlan,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp),
+                contentPadding = ButtonDefaults.ContentPadding,
+            ) {
+                Icon(
+                    Icons.Outlined.CalendarViewDay,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.size(6.dp))
+                Text("Pełny plan", style = MaterialTheme.typography.labelLarge)
             }
-            OutlinedButton(onClick = onOpenDayPlan, modifier = Modifier.weight(1f)) {
-                Text("Pełny plan")
+            Button(
+                onClick = onOpenRehab,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp),
+                contentPadding = ButtonDefaults.ContentPadding,
+            ) {
+                Icon(
+                    Icons.Outlined.DirectionsBike,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.size(6.dp))
+                Text("Start sesji", style = MaterialTheme.typography.labelLarge)
             }
         }
-        OutlinedButton(onClick = onOpenMeasurements, modifier = Modifier.fillMaxWidth()) {
-            Text("Wszystkie pomiary")
-        }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
     }
 }
 
@@ -282,65 +345,126 @@ private fun CompactVitalTile(
 }
 
 @Composable
+private fun CompactPlanTile(
+    item: DayPlanItem,
+    timeFmt: DateTimeFormatter,
+) {
+    val bg = toneBg(item.tone)
+    val statusColor = toneColor(item.tone)
+    val kindIcon = when (item.kind) {
+        DayPlanKind.MED -> Icons.Outlined.Medication
+        DayPlanKind.MEASUREMENT -> when {
+            item.title.contains("ciśn", ignoreCase = true) ||
+                item.detail.contains("/", ignoreCase = false) -> Icons.Outlined.Bloodtype
+            item.title.contains("mas", ignoreCase = true) ||
+                item.detail.contains("kg", ignoreCase = true) -> Icons.Outlined.MonitorWeight
+            else -> Icons.Outlined.FavoriteBorder
+        }
+        DayPlanKind.SESSION -> Icons.Outlined.MonitorHeart
+    }
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, ProPlusColors.Line),
+        color = bg,
+    ) {
+        Row(
+            Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(kindIcon, contentDescription = null, tint = ProPlusColors.Accent, modifier = Modifier.size(16.dp))
+            Text(
+                item.time.format(timeFmt),
+                style = MaterialTheme.typography.labelLarge,
+                color = ProPlusColors.Accent,
+                fontWeight = FontWeight.Bold,
+            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ProPlusColors.Navy,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    item.detail,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ProPlusColors.Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                toneShort(item.tone),
+                style = MaterialTheme.typography.labelSmall,
+                color = statusColor,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
 private fun SessionPlanTile(
     item: DayPlanItem,
     archived: ArchivedRehabSession?,
     timeFmt: DateTimeFormatter,
 ) {
-    val bg = when (item.tone) {
-        DayPlanTone.ON_TIME -> Color(0xFFE8F5E9)
-        DayPlanTone.LATE -> Color(0xFFFFF8E1)
-        DayPlanTone.MISSED -> Color(0xFFFFEBEE)
-        DayPlanTone.UPCOMING -> ProPlusColors.Surface
-    }
-    val statusLabel = when (item.tone) {
-        DayPlanTone.ON_TIME -> "W terminie"
-        DayPlanTone.LATE -> "Po terminie"
-        DayPlanTone.MISSED -> "Niewykonane"
-        DayPlanTone.UPCOMING -> "Zaplanowane"
-    }
-    val statusColor = when (item.tone) {
-        DayPlanTone.ON_TIME -> ProPlusColors.ResultGood
-        DayPlanTone.LATE -> ProPlusColors.ResultWatch
-        DayPlanTone.MISSED -> ProPlusColors.ResultAlert
-        DayPlanTone.UPCOMING -> ProPlusColors.Muted
-    }
+    val bg = toneBg(item.tone)
+    val statusColor = toneColor(item.tone)
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = bg,
         border = BorderStroke(1.dp, ProPlusColors.Line),
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                Icon(
+                    Icons.Outlined.MonitorHeart,
+                    contentDescription = null,
+                    tint = ProPlusColors.Accent,
+                    modifier = Modifier.size(16.dp),
+                )
                 Text(
                     item.time.format(timeFmt),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     color = ProPlusColors.Accent,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    item.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ProPlusColors.Navy,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    toneShort(item.tone),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor,
                     fontWeight = FontWeight.SemiBold,
                 )
-                Column(Modifier.weight(1f)) {
-                    Text(item.title, style = MaterialTheme.typography.titleMedium, color = ProPlusColors.Navy)
-                    if (archived == null) {
-                        Text(item.detail, style = MaterialTheme.typography.bodyMedium, color = ProPlusColors.Muted)
-                    }
-                }
-                Text(statusLabel, color = statusColor, fontWeight = FontWeight.Bold)
             }
             if (archived != null) {
                 Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    archived.bloodPressureSummary?.let { bp ->
+                    archived.bloodPressureSummary?.let { bpSum ->
                         PictogramValue(
                             icon = Icons.Outlined.Bloodtype,
-                            value = bp,
-                            valueColor = whoColorForBpText(bp),
+                            value = bpSum,
+                            valueColor = whoColorForBpText(bpSum),
                         )
                     }
                     archived.weightSummary?.let { w ->
@@ -354,18 +478,46 @@ private fun SessionPlanTile(
                 }
                 if (archived.cycleHrSummaries.isNotEmpty()) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Tętno", style = MaterialTheme.typography.labelMedium, color = ProPlusColors.Muted)
                         archived.cycleHrSummaries.forEach { summary ->
                             CycleHrChip(summary)
                         }
                     }
                 }
+            } else {
+                Text(
+                    item.detail,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ProPlusColors.Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
+}
+
+private fun toneBg(tone: DayPlanTone): Color = when (tone) {
+    DayPlanTone.ON_TIME -> Color(0xFFE8F5E9)
+    DayPlanTone.LATE -> Color(0xFFFFF8E1)
+    DayPlanTone.MISSED -> Color(0xFFFFEBEE)
+    DayPlanTone.UPCOMING -> ProPlusColors.Surface
+}
+
+private fun toneColor(tone: DayPlanTone): Color = when (tone) {
+    DayPlanTone.ON_TIME -> ProPlusColors.ResultGood
+    DayPlanTone.LATE -> ProPlusColors.ResultWatch
+    DayPlanTone.MISSED -> ProPlusColors.ResultAlert
+    DayPlanTone.UPCOMING -> ProPlusColors.Muted
+}
+
+private fun toneShort(tone: DayPlanTone): String = when (tone) {
+    DayPlanTone.ON_TIME -> "OK"
+    DayPlanTone.LATE -> "Późno"
+    DayPlanTone.MISSED -> "Brak"
+    DayPlanTone.UPCOMING -> "Plan"
 }
 
 @Composable
@@ -378,12 +530,14 @@ private fun PictogramValue(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = ProPlusColors.Accent, modifier = Modifier.size(18.dp))
+        Icon(icon, contentDescription = null, tint = ProPlusColors.Accent, modifier = Modifier.size(14.dp))
         Text(
             value,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelSmall,
             color = valueColor,
             fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -399,8 +553,8 @@ private fun SurveyPictogram(passed: Boolean?) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(18.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = tint, fontWeight = FontWeight.SemiBold)
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(14.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = tint, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -418,19 +572,19 @@ private fun CycleHrChip(summary: CycleHrSummary) {
         border = BorderStroke(1.dp, tint.copy(alpha = 0.35f)),
     ) {
         Row(
-            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
                 "C${summary.cycle}",
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = ProPlusColors.Navy,
             )
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(12.dp))
             summary.avgBpm?.let {
-                Text("$it", style = MaterialTheme.typography.labelSmall, color = tint, fontWeight = FontWeight.SemiBold)
+                Text("$it", fontSize = 10.sp, color = tint, fontWeight = FontWeight.SemiBold)
             }
         }
     }

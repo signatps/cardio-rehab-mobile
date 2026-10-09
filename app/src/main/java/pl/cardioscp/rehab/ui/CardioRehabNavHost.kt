@@ -92,7 +92,6 @@ fun CardioRehabNavHost(
                             onOpenDayPlan = { destination = AppDestination.DAY_PLAN.name },
                             onOpenMeds = { destination = AppDestination.MEDS.name },
                             onOpenAlerts = { destination = AppDestination.MEDS.name },
-                            onOpenMeasurements = { destination = AppDestination.MEASUREMENTS.name },
                             onMeasureBp = viewModel::measureBpStandalone,
                             onMeasureWeight = viewModel::measureWeightStandalone,
                             onSpeakWelcome = viewModel::speakDayPlanWelcome,
