@@ -47,7 +47,7 @@ fun SessionSchemeStepId.pictogram(): ImageVector = when (this) {
     SessionSchemeStepId.QUAL_ECG -> Icons.Outlined.Hotel
     SessionSchemeStepId.BP -> Icons.Outlined.MonitorHeart
     SessionSchemeStepId.WEIGHT -> Icons.Outlined.MonitorWeight
-    SessionSchemeStepId.SURVEY -> Icons.Outlined.Assignment
+    SessionSchemeStepId.SURVEY -> Icons.AutoMirrored.Outlined.Assignment
     SessionSchemeStepId.ADMISSION -> Icons.Outlined.HourglassBottom
     SessionSchemeStepId.TRAINING -> Icons.AutoMirrored.Outlined.DirectionsRun
     SessionSchemeStepId.BORG -> Icons.Outlined.FavoriteBorder
