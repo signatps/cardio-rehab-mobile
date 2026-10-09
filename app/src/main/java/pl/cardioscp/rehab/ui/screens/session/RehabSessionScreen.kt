@@ -939,64 +939,74 @@ private fun SummaryContent(
     onOpenEcg: (pl.cardioscp.rehab.session.SessionEcgEntry) -> Unit,
     onDone: () -> Unit,
 ) {
-    Column(
+    Row(
         Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        Column(
+            Modifier
+                .weight(0.38f)
+                .fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             CoachArt(
                 resId = R.drawable.coach_summary,
                 contentDescription = "Podsumowanie",
-                size = 64.dp,
+                size = 120.dp,
             )
             Text(
                 "Podsumowanie sesji",
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
                 color = ProPlusColors.Navy,
                 fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
             )
-        }
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
             state.vitals.bloodPressure?.let {
                 Text(
                     "RR ${it.summary}",
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.titleSmall,
                     color = ProPlusColors.Navy,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
             state.vitals.weight?.let {
                 Text(
                     "Masa ${it.summary}",
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.titleSmall,
                     color = ProPlusColors.Navy,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
             Text(
                 "Ankieta: ${DefaultRehabSurvey.evaluate(state.surveyAnswers)}",
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.titleSmall,
                 color = ProPlusColors.Navy,
+                fontWeight = FontWeight.SemiBold,
             )
-        }
-        Text(
-            "Tętno EKG · pocz. / śr. / końc.",
-            style = MaterialTheme.typography.labelMedium,
-            color = ProPlusColors.Muted,
-        )
-        if (state.ecgEntries.isEmpty()) {
-            Text("Brak zapisanych EKG w tej sesji.", color = ProPlusColors.Muted)
-        } else {
-            Column(
-                Modifier
-                    .weight(1f, fill = false)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+            Spacer(Modifier.weight(1f))
+            Button(
+                onClick = onDone,
+                modifier = Modifier.widthIn(min = 140.dp, max = 200.dp),
             ) {
+                Text("Zakończ", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        Column(
+            Modifier
+                .weight(0.62f)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "Tętno EKG · pocz. / śr. / końc.",
+                style = MaterialTheme.typography.labelMedium,
+                color = ProPlusColors.Muted,
+            )
+            if (state.ecgEntries.isEmpty()) {
+                Text("Brak zapisanych EKG w tej sesji.", color = ProPlusColors.Muted)
+            } else {
                 state.ecgEntries.forEach { entry ->
                     val trend = remember(entry.recording.file.absolutePath, entry.hrAvgBpm) {
                         if (entry.hrAvgBpm != null || entry.hrStartBpm != null) {
@@ -1013,15 +1023,6 @@ private fun SummaryContent(
                 }
             }
         }
-        Spacer(Modifier.weight(1f, fill = true))
-        Button(
-            onClick = onDone,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .widthIn(min = 140.dp, max = 200.dp),
-        ) {
-            Text("Zakończ", style = MaterialTheme.typography.labelLarge)
-        }
     }
 }
 
@@ -1035,16 +1036,19 @@ private fun EcgHrTrendCard(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(10.dp),
         border = BorderStroke(1.dp, ProPlusColors.Line),
         color = ProPlusColors.Surface,
     ) {
-        Row(
-            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Column(
+            Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Column(Modifier.weight(0.34f)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
                 Text(
                     title,
                     style = MaterialTheme.typography.labelLarge,
@@ -1064,8 +1068,8 @@ private fun EcgHrTrendCard(
                 avg = trend.avgBpm,
                 end = trend.endBpm,
                 modifier = Modifier
-                    .weight(0.66f)
-                    .height(36.dp),
+                    .fillMaxWidth()
+                    .height(56.dp),
             )
         }
     }
