@@ -960,7 +960,7 @@ private fun TrainingPhaseContent(
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 training.phase.label,
@@ -969,37 +969,20 @@ private fun TrainingPhaseContent(
                 modifier = Modifier.weight(1f),
             )
             if (canToggleLiveEcg) {
-                FilterChip(
+                CompactPictogramKey(
+                    icon = Icons.Outlined.MonitorHeart,
+                    label = if (showLiveEcg) "Ukryj" else "EKG",
                     selected = showLiveEcg,
+                    contentDescription = if (showLiveEcg) "Ukryj EKG" else "Pokaż EKG",
                     onClick = { showLiveEcg = !showLiveEcg },
-                    label = {
-                        Text(
-                            if (showLiveEcg) "Ukryj EKG" else "Pokaż EKG",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Outlined.MonitorHeart,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    },
                 )
             }
-            OutlinedButton(
+            CompactPictogramKey(
+                icon = Icons.Outlined.ChatBubbleOutline,
+                label = "Notatka",
+                contentDescription = "Komentarz",
                 onClick = onComment,
-                modifier = Modifier.height(34.dp),
-                contentPadding = ButtonDefaults.ContentPadding,
-            ) {
-                Icon(
-                    Icons.Outlined.ChatBubbleOutline,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(Modifier.width(4.dp))
-                Text("Komentarz", style = MaterialTheme.typography.labelMedium)
-            }
+            )
         }
         if (timed) {
             LinearProgressIndicator(
@@ -1184,6 +1167,41 @@ private fun TrainingPhaseContent(
             ) { Text("Zakończ trening") }
             TextButton(onClick = onDismissEvent) { Text("Kontynuuj fazę") }
         }
+    }
+}
+
+/** Mały klawisz z piktogramem + krótką etykietą — mniej miejsca niż Chip/Button. */
+@Composable
+private fun CompactPictogramKey(
+    icon: ImageVector,
+    label: String,
+    contentDescription: String,
+    onClick: () -> Unit,
+    selected: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    val tint = if (selected) ProPlusColors.Accent else ProPlusColors.Navy
+    Column(
+        modifier = modifier
+            .widthIn(min = 52.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(0.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(22.dp),
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = tint,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+        )
     }
 }
 
