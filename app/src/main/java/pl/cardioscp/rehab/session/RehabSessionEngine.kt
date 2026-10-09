@@ -340,7 +340,8 @@ class RehabSessionEngine(
                             TrainingPhaseKind.ECG_REST_START -> TrainingCoachVisual.HOLD_STILL_ECG
                         },
                     ),
-                    statusMessage = phase.label,
+                    // Nie dubluj phase.label w statusMessage — widać go w panelu treningu.
+                    statusMessage = null,
                     busy = false,
                 )
             }

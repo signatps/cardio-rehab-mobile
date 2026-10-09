@@ -97,6 +97,7 @@ import pl.cardioscp.rehab.session.TrainingCoachVisual
 import pl.cardioscp.rehab.session.TrainingPhaseKind
 import pl.cardioscp.rehab.ui.ble.MeasurePopup
 import pl.cardioscp.rehab.ui.components.AnalogGauge
+import pl.cardioscp.rehab.ui.components.AnimatedNordicWalker
 import pl.cardioscp.rehab.ui.components.CoachBannerColors
 import pl.cardioscp.rehab.ui.components.ElectrodeMannequin
 import pl.cardioscp.rehab.ui.components.FlashingCoachBanner
@@ -176,8 +177,13 @@ fun RehabSessionScreen(
             }
             phrase?.let(viewModel::speakCoachMessage)
         }
-        state.statusMessage?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = ProPlusColors.Navy)
+        // W TRAINING phase.label jest już w panelu — nie powtarzaj statusMessage z tym samym tekstem.
+        val status = state.statusMessage
+        val trainingLabel = state.training?.phase?.label
+        if (status != null &&
+            (state.step != RehabStep.TRAINING || (trainingLabel != null && status != trainingLabel))
+        ) {
+            Text(status, style = MaterialTheme.typography.bodyMedium, color = ProPlusColors.Navy)
             Spacer(Modifier.height(8.dp))
         }
         state.error?.let {
@@ -1017,11 +1023,22 @@ private fun TrainingPhaseContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                CoachArt(
-                    resId = pictogramRes,
-                    contentDescription = headline,
-                    size = 110.dp,
-                )
+                val walking =
+                    visual == TrainingCoachVisual.EXERCISE &&
+                        exerciseKind == ExerciseKind.NORDIC_WALKING
+                if (walking) {
+                    AnimatedNordicWalker(
+                        contentDescription = headline,
+                        size = 110.dp,
+                        animated = true,
+                    )
+                } else {
+                    CoachArt(
+                        resId = pictogramRes,
+                        contentDescription = headline,
+                        size = 110.dp,
+                    )
+                }
                 if (visual == TrainingCoachVisual.EXERCISE) {
                     Text(
                         exerciseKind.displayNamePl,
