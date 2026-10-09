@@ -11,7 +11,7 @@ object WelcomePhrase {
         patientName.trim().substringBefore(' ').take(40).ifBlank { "Pacjencie" }
 
     fun pendingMedCount(clinic: ClinicSnapshot): Int =
-        clinic.todayDoses.count { it.status == DoseStatus.PENDING }
+        clinic.todayDoses.count { it.needsAction }
 
     fun pendingRehabSessionCount(clinic: ClinicSnapshot, today: LocalDate = LocalDate.now()): Int =
         clinic.sessions.count {

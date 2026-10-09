@@ -36,12 +36,16 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun MedsScreen(
     clinic: ClinicSnapshot,
-    onMarkTaken: (String) -> Unit,
+    onConfirmTaken: (String) -> Unit,
+    onSkip: (id: String, reason: String) -> Unit,
+    onSnooze: (id: String, hhmm: String) -> Unit,
     onAddMedication: (name: String, dose: String, times: List<String>, note: String) -> Unit = { _, _, _, _ -> },
     onRemoveMedication: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     var addOpen by remember { mutableStateOf(false) }
+    var skipDoseId by remember { mutableStateOf<String?>(null) }
+    var laterDoseId by remember { mutableStateOf<String?>(null) }
     var catalogMeta by remember {
         mutableStateOf(
             runCatching { MedCatalogLoader.get(context).meta }.getOrNull(),
@@ -50,6 +54,7 @@ fun MedsScreen(
     var catalogBusy by remember { mutableStateOf(false) }
     var catalogMessage by remember { mutableStateOf<String?>(null) }
     val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
+    val dateFmt = DateTimeFormatter.ofPattern("d.MM.yyyy")
     Column(
         Modifier
             .fillMaxSize()
@@ -61,7 +66,14 @@ fun MedsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Leki", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
+            Column {
+                Text("Leki", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
+                Text(
+                    "Dziś · ${clinic.planDate.format(dateFmt)}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = ProPlusColors.Muted,
+                )
+            }
             Button(onClick = { addOpen = true }) { Text("Dodaj lek") }
         }
         CatalogMetaRow(
@@ -88,35 +100,79 @@ fun MedsScreen(
             Text("Brak dawek na dziś.", color = ProPlusColors.Muted)
         }
         clinic.todayDoses.forEach { dose ->
+            val accent = when (dose.status) {
+                DoseStatus.TAKEN -> ProPlusColors.ResultGood
+                DoseStatus.SKIPPED -> ProPlusColors.ResultAlert
+                DoseStatus.SNOOZED -> ProPlusColors.ResultWatch
+                DoseStatus.PENDING -> ProPlusColors.Accent
+            }
             Surface(
                 Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, ProPlusColors.Line),
+                border = BorderStroke(1.5.dp, accent.copy(alpha = 0.55f)),
                 color = when (dose.status) {
                     DoseStatus.TAKEN -> ProPlusColors.Mist
                     DoseStatus.SKIPPED -> ProPlusColors.Bg
+                    DoseStatus.SNOOZED -> ToneLateSoft
                     DoseStatus.PENDING -> ProPlusColors.Surface
                 },
             ) {
-                Row(
+                Column(
                     Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
-                        dose.time.format(timeFmt),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = ProPlusColors.Accent,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Column(Modifier.weight(1f)) {
-                        Text(dose.drugName, style = MaterialTheme.typography.titleMedium, color = ProPlusColors.Navy)
-                        Text(dose.doseLabel, style = MaterialTheme.typography.bodyMedium, color = ProPlusColors.Muted)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            dose.time.format(timeFmt),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = ProPlusColors.Accent,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(dose.drugName, style = MaterialTheme.typography.titleMedium, color = ProPlusColors.Navy)
+                            Text(dose.doseLabel, style = MaterialTheme.typography.bodyMedium, color = ProPlusColors.Muted)
+                        }
+                        Surface(
+                            color = accent.copy(alpha = 0.14f),
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text(
+                                when (dose.status) {
+                                    DoseStatus.TAKEN -> "przyjęte"
+                                    DoseStatus.SKIPPED -> "pominięte"
+                                    DoseStatus.SNOOZED -> "później"
+                                    DoseStatus.PENDING -> "do potwierdzenia"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = accent,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            )
+                        }
                     }
-                    when (dose.status) {
-                        DoseStatus.PENDING -> Button(onClick = { onMarkTaken(dose.id) }) { Text("Przyjęte") }
-                        DoseStatus.TAKEN -> Text("OK", color = ProPlusColors.ResultGood, fontWeight = FontWeight.Bold)
-                        DoseStatus.SKIPPED -> Text("Pominięte", color = ProPlusColors.Danger)
+                    if (dose.status == DoseStatus.SKIPPED && !dose.skipReason.isNullOrBlank()) {
+                        Text(
+                            "Powód: ${dose.skipReason}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = ProPlusColors.ResultAlert,
+                        )
+                    }
+                    if (dose.needsAction) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { onConfirmTaken(dose.id) }) {
+                                Text("Przyjęte")
+                            }
+                            OutlinedButton(onClick = { skipDoseId = dose.id }) {
+                                Text("Pominięte")
+                            }
+                            OutlinedButton(onClick = { laterDoseId = dose.id }) {
+                                Text("Później")
+                            }
+                        }
                     }
                 }
             }
@@ -155,7 +211,29 @@ fun MedsScreen(
             },
         )
     }
+    skipDoseId?.let { id ->
+        MedSkipReasonDialog(
+            onDismiss = { skipDoseId = null },
+            onConfirm = { reason ->
+                onSkip(id, reason)
+                skipDoseId = null
+            },
+        )
+    }
+    laterDoseId?.let { id ->
+        val initial = clinic.todayDoses.find { it.id == id }?.time?.format(timeFmt) ?: "12:00"
+        MedLaterTimeDialog(
+            initialTime = initial,
+            onDismiss = { laterDoseId = null },
+            onConfirm = { hhmm ->
+                onSnooze(id, hhmm)
+                laterDoseId = null
+            },
+        )
+    }
 }
+
+private val ToneLateSoft = androidx.compose.ui.graphics.Color(0xFFFFF8E1)
 
 @Composable
 private fun CatalogMetaRow(

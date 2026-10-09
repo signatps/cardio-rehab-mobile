@@ -14,28 +14,53 @@ class ClinicDemoStore(context: Context) {
     private val prefs: SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val zone = ZoneId.systemDefault()
-    private val today = LocalDate.now()
 
     private var measurements = defaultMeasurements()
     private var medications = defaultMedications()
     private var doses = defaultDoses()
     private var diseases = defaultDiseases()
-    private var sessions = defaultSessions()
+    private var sessions = defaultSessions(calendarToday())
+    /** Ostatni dzień, dla którego zmaterializowano dawki / sesję. */
+    private var activePlanDay: LocalDate = calendarToday()
 
     init {
         loadPersisted()
-        ensureTodayDoses()
+        refreshCalendarDay()
     }
 
-    fun snapshot(): ClinicSnapshot = ClinicSnapshot(
-        patientName = "Jan Kowalski",
-        measurements = measurements.sortedByDescending { it.measuredAtMs },
-        medications = medications,
-        todayDoses = doses.sortedBy { it.time },
-        diseases = diseases,
-        sessions = sessions.sortedWith(compareBy({ it.date }, { it.time })),
-        dayPlan = buildDayPlan(),
-    )
+    fun calendarToday(): LocalDate = LocalDate.now(zone)
+
+    /**
+     * Po północy: nowy dzień planu, nowe dawki leków, nowa sesja do wykonania.
+     * @return true gdy nastąpił rollover.
+     */
+    fun refreshCalendarDay(): Boolean {
+        val day = calendarToday()
+        var rolled = false
+        if (day != activePlanDay) {
+            activePlanDay = day
+            rolled = true
+        }
+        materializeDosesFor(day)
+        ensureTodayRehabSession(day)
+        if (rolled) persist()
+        return rolled
+    }
+
+    fun snapshot(): ClinicSnapshot {
+        refreshCalendarDay()
+        val day = calendarToday()
+        return ClinicSnapshot(
+            patientName = "Jan Kowalski",
+            planDate = day,
+            measurements = measurements.sortedByDescending { it.measuredAtMs },
+            medications = medications,
+            todayDoses = doses.filter { it.day == day }.sortedBy { it.time },
+            diseases = diseases,
+            sessions = sessions.sortedWith(compareBy({ it.date }, { it.time })),
+            dayPlan = buildDayPlan(day),
+        )
+    }
 
     fun addMeasurement(
         kind: VitalKind,
@@ -60,11 +85,58 @@ class ClinicDemoStore(context: Context) {
     }
 
     fun markDoseTaken(id: String) {
-        val now = System.currentTimeMillis()
-        doses = doses.map {
-            if (it.id == id) it.copy(status = DoseStatus.TAKEN, takenAtMs = now) else it
+        confirmDose(id, DoseStatus.TAKEN)
+    }
+
+    /**
+     * Potwierdzenie dawki jak w DSD: przyjęte / pominięte / później (przesunięcie terminu).
+     */
+    fun confirmDose(
+        id: String,
+        status: DoseStatus,
+        skipReason: String? = null,
+        newTime: LocalTime? = null,
+    ): MedDose? {
+        refreshCalendarDay()
+        if (status == DoseStatus.PENDING) return null
+        val current = doses.find { it.id == id } ?: return null
+        if (current.status == DoseStatus.TAKEN || current.status == DoseStatus.SKIPPED) {
+            return current
         }
+        if (status == DoseStatus.SKIPPED) {
+            val reason = skipReason?.trim().orEmpty()
+            if (reason.isBlank()) return null
+            if (!DoseSkipReasons.isKnown(reason) && reason.length < 3) return null
+        }
+        if (status == DoseStatus.SNOOZED) {
+            val t = newTime ?: return null
+            // nowa godzina w przyszłości (dziś lub jutro — tu tylko lokalny LocalTime w dniu dawki)
+            val due = current.day.atTime(t).atZone(zone).toInstant().toEpochMilli()
+            if (due <= System.currentTimeMillis() - 60_000L) {
+                // jeśli wybrano godzinę w przeszłości — traktuj jako jutro (przesuń day)
+                val tomorrow = calendarToday().plusDays(1)
+                val updated = current.copy(
+                    status = DoseStatus.SNOOZED,
+                    time = t,
+                    day = tomorrow,
+                    takenAtMs = System.currentTimeMillis(),
+                    skipReason = null,
+                )
+                doses = doses.map { if (it.id == id) updated else it }
+                persist()
+                return updated
+            }
+        }
+        val now = System.currentTimeMillis()
+        val updated = current.copy(
+            status = status,
+            takenAtMs = now,
+            time = if (status == DoseStatus.SNOOZED && newTime != null) newTime else current.time,
+            skipReason = if (status == DoseStatus.SKIPPED) skipReason?.trim() else current.skipReason,
+        )
+        doses = doses.map { if (it.id == id) updated else it }
         persist()
+        return updated
     }
 
     fun addMedication(
@@ -95,7 +167,7 @@ class ClinicDemoStore(context: Context) {
     fun removeMedication(id: String): Boolean {
         val removed = medications.firstOrNull { it.id == id } ?: return false
         medications = medications.filterNot { it.id == id }
-        doses = doses.filterNot { it.drugName == removed.name }
+        doses = doses.filterNot { it.medicationId == removed.id || it.drugName == removed.name }
         persist()
         return true
     }
@@ -141,9 +213,11 @@ class ClinicDemoStore(context: Context) {
     }
 
     fun markTodayRehabSessionDone() {
+        val day = calendarToday()
         val now = System.currentTimeMillis()
+        ensureTodayRehabSession(day)
         sessions = sessions.map {
-            if (it.date == today &&
+            if (it.date == day &&
                 it.kind == PlannedSessionKind.REHAB_INTERVAL &&
                 it.status == PlannedSessionStatus.SCHEDULED
             ) {
@@ -155,12 +229,27 @@ class ClinicDemoStore(context: Context) {
         persist()
     }
 
+    /** Po północy — zaplanuj sesję rehab na dziś, jeśli brak. */
+    private fun ensureTodayRehabSession(day: LocalDate) {
+        if (sessions.any { it.date == day && it.kind == PlannedSessionKind.REHAB_INTERVAL }) return
+        sessions = sessions + PlannedSession(
+            id = "s-$day",
+            date = day,
+            time = LocalTime.of(10, 0),
+            kind = PlannedSessionKind.REHAB_INTERVAL,
+            title = "Trening sekwencyjny",
+            status = PlannedSessionStatus.SCHEDULED,
+        )
+    }
+
     /**
      * Najbliższa nieprzyjęta dawka (dziś lub jutro) do AlarmManager.
      * @return Triple(triggerAtMs, title, body) lub null
      */
     fun nextPendingDoseAlarm(): Triple<Long, String, String>? {
+        refreshCalendarDay()
         val now = System.currentTimeMillis()
+        val today = calendarToday()
         val candidates = mutableListOf<Triple<Long, String, String>>()
         for (dayOffset in 0..1) {
             val date = today.plusDays(dayOffset.toLong())
@@ -171,12 +260,29 @@ class ClinicDemoStore(context: Context) {
                     val at = date.atTime(time).atZone(zone).toInstant().toEpochMilli()
                     if (at <= now + 15_000L) continue
                     if (dayOffset == 0) {
-                        val alreadyTaken = doses.any {
-                            it.drugName == med.name &&
+                        val closed = doses.any {
+                            it.day == date &&
+                                it.medicationId == med.id &&
                                 it.time == time &&
-                                it.status == DoseStatus.TAKEN
+                                (it.status == DoseStatus.TAKEN || it.status == DoseStatus.SKIPPED)
                         }
-                        if (alreadyTaken) continue
+                        if (closed) continue
+                        val snoozed = doses.firstOrNull {
+                            it.day == date &&
+                                it.medicationId == med.id &&
+                                it.status == DoseStatus.SNOOZED
+                        }
+                        if (snoozed != null) {
+                            val snoozeAt = snoozed.day.atTime(snoozed.time).atZone(zone).toInstant().toEpochMilli()
+                            if (snoozeAt > now + 15_000L) {
+                                candidates += Triple(
+                                    snoozeAt,
+                                    "Przypomnienie o leku",
+                                    "${med.name} · ${med.doseLabel} · ${snoozed.time}",
+                                )
+                            }
+                            continue
+                        }
                     }
                     candidates += Triple(
                         at,
@@ -189,11 +295,13 @@ class ClinicDemoStore(context: Context) {
         return candidates.minByOrNull { it.first }
     }
 
-    /** Payload powiadomienia „teraz” — pierwsza zaległa / bieżąca dawka PENDING. */
+    /** Payload powiadomienia „teraz” — pierwsza zaległa / bieżąca dawka do potwierdzenia. */
     fun dueMedicationReminderPayload(nowMs: Long = System.currentTimeMillis()): Pair<String, String>? {
+        refreshCalendarDay()
+        val day = calendarToday()
         val nowTime = java.time.Instant.ofEpochMilli(nowMs).atZone(zone).toLocalTime()
         val due = doses
-            .filter { it.status == DoseStatus.PENDING && !it.time.isAfter(nowTime) }
+            .filter { it.day == day && it.needsAction && !it.time.isAfter(nowTime) }
             .minByOrNull { it.time }
             ?: return null
         return "Przypomnienie o leku" to
@@ -201,26 +309,38 @@ class ClinicDemoStore(context: Context) {
     }
 
     fun ensureTodayDoses() {
-        val existingKeys = doses.map { "${it.drugName}|${it.time}" }.toSet()
+        materializeDosesFor(calendarToday())
+    }
+
+    private fun materializeDosesFor(day: LocalDate) {
+        val existingIds = doses.map { it.id }.toSet()
         val generated = mutableListOf<MedDose>()
         for (med in medications) {
             val times = med.times.ifEmpty { parseTimes(med.scheduleNote) }
             for (t in times) {
                 val time = runCatching { LocalTime.parse(normalizeTime(t)) }.getOrNull()
                     ?: continue
-                val key = "${med.name}|$time"
-                if (key in existingKeys) continue
+                val id = "dose-${med.id}-$day-${normalizeTime(t)}"
+                if (id in existingIds) continue
+                // Nie duplikuj gdy już jest snoozed/taken z tym samym med+dzień+czas
+                val exists = doses.any {
+                    it.medicationId == med.id && it.day == day && it.time == time
+                }
+                if (exists) continue
                 generated += MedDose(
-                    id = "dose-${med.id}-$t",
+                    id = id,
+                    medicationId = med.id,
                     drugName = med.name,
                     doseLabel = med.doseLabel,
                     time = time,
+                    day = day,
                     status = DoseStatus.PENDING,
                 )
             }
         }
         if (generated.isNotEmpty()) {
-            doses = (doses + generated).distinctBy { "${it.drugName}|${it.time}" }
+            doses = doses + generated
+            persist()
         }
     }
 
@@ -228,33 +348,52 @@ class ClinicDemoStore(context: Context) {
      * Plan dnia = leki + sesja rehab.
      * Dodatkowe pomiary pacjenta (bez grupy sesji) dopisywane jako wykonane.
      */
-    private fun buildDayPlan(): List<DayPlanItem> {
-        val nowTime = LocalTime.now()
-        val medItems = doses.map { dose ->
+    private fun buildDayPlan(day: LocalDate): List<DayPlanItem> {
+        val nowTime = LocalTime.now(zone)
+        val medItems = doses.filter { it.day == day }.map { dose ->
             val done = dose.status == DoseStatus.TAKEN
+            val detail = buildString {
+                append(dose.doseLabel)
+                when (dose.status) {
+                    DoseStatus.SKIPPED -> append(dose.skipReason?.let { " · pominięte: $it" } ?: " · pominięte")
+                    DoseStatus.SNOOZED -> append(" · później")
+                    else -> Unit
+                }
+            }
             DayPlanItem(
                 id = "dose-${dose.id}",
                 time = dose.time,
                 title = dose.drugName,
-                detail = dose.doseLabel,
+                detail = detail,
                 done = done,
                 kind = DayPlanKind.MED,
                 completedAtMs = dose.takenAtMs,
-                tone = planTone(
-                    done = done,
-                    scheduled = dose.time,
-                    completedAtMs = dose.takenAtMs,
-                    nowTime = nowTime,
-                ),
+                tone = when (dose.status) {
+                    DoseStatus.SKIPPED -> DayPlanTone.MISSED
+                    DoseStatus.SNOOZED -> planTone(
+                        done = false,
+                        day = day,
+                        scheduled = dose.time,
+                        completedAtMs = null,
+                        nowTime = nowTime,
+                    )
+                    else -> planTone(
+                        done = done,
+                        day = day,
+                        scheduled = dose.time,
+                        completedAtMs = dose.takenAtMs,
+                        nowTime = nowTime,
+                    )
+                },
             )
         }
         val todaySession = sessions.firstOrNull {
-            it.date == today && it.kind == PlannedSessionKind.REHAB_INTERVAL
+            it.date == day && it.kind == PlannedSessionKind.REHAB_INTERVAL
         }
         val sessionItem = todaySession?.let { s ->
             val done = s.status == PlannedSessionStatus.DONE
             DayPlanItem(
-                id = "session",
+                id = "session-$day",
                 time = s.time,
                 title = "Sesja rehabilitacji",
                 detail = s.title,
@@ -266,6 +405,7 @@ class ClinicDemoStore(context: Context) {
                     PlannedSessionStatus.CANCELLED, PlannedSessionStatus.MISSED -> DayPlanTone.MISSED
                     else -> planTone(
                         done = done,
+                        day = day,
                         scheduled = s.time,
                         completedAtMs = s.completedAtMs,
                         nowTime = nowTime,
@@ -273,8 +413,8 @@ class ClinicDemoStore(context: Context) {
                 },
             )
         }
-        val dayStart = today.atStartOfDay(zone).toInstant().toEpochMilli()
-        val dayEnd = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val dayStart = day.atStartOfDay(zone).toInstant().toEpochMilli()
+        val dayEnd = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val measureItems = measurements
             .filter { it.sessionGroupId == null && it.measuredAtMs in dayStart until dayEnd }
             .filter { it.kind == VitalKind.BLOOD_PRESSURE || it.kind == VitalKind.WEIGHT || it.kind == VitalKind.PULSE }
@@ -296,17 +436,19 @@ class ClinicDemoStore(context: Context) {
 
     private fun planTone(
         done: Boolean,
+        day: LocalDate,
         scheduled: LocalTime,
         completedAtMs: Long?,
         nowTime: LocalTime,
     ): DayPlanTone {
-        val deadline = today.atTime(scheduled).atZone(zone).toInstant().toEpochMilli()
+        val deadline = day.atTime(scheduled).atZone(zone).toInstant().toEpochMilli()
         return when {
             done -> {
                 val at = completedAtMs ?: deadline
                 if (at <= deadline) DayPlanTone.ON_TIME else DayPlanTone.LATE
             }
-            nowTime.isAfter(scheduled) -> DayPlanTone.MISSED
+            day == calendarToday() && nowTime.isAfter(scheduled) -> DayPlanTone.MISSED
+            day.isBefore(calendarToday()) -> DayPlanTone.MISSED
             else -> DayPlanTone.UPCOMING
         }
     }
@@ -330,11 +472,14 @@ class ClinicDemoStore(context: Context) {
                 arr.put(
                     JSONObject()
                         .put("id", d.id)
+                        .put("medicationId", d.medicationId)
                         .put("drugName", d.drugName)
                         .put("doseLabel", d.doseLabel)
                         .put("time", d.time.toString())
+                        .put("day", d.day.toString())
                         .put("status", d.status.name)
-                        .put("takenAtMs", d.takenAtMs ?: JSONObject.NULL),
+                        .put("takenAtMs", d.takenAtMs ?: JSONObject.NULL)
+                        .put("skipReason", d.skipReason ?: JSONObject.NULL),
                 )
             }
         })
@@ -352,6 +497,21 @@ class ClinicDemoStore(context: Context) {
                 )
             }
         })
+        root.put("sessions", JSONArray().also { arr ->
+            sessions.forEach { s ->
+                arr.put(
+                    JSONObject()
+                        .put("id", s.id)
+                        .put("date", s.date.toString())
+                        .put("time", s.time.toString())
+                        .put("kind", s.kind.name)
+                        .put("title", s.title)
+                        .put("status", s.status.name)
+                        .put("completedAtMs", s.completedAtMs ?: JSONObject.NULL),
+                )
+            }
+        })
+        root.put("activePlanDay", activePlanDay.toString())
         prefs.edit().putString(KEY_STATE, root.toString()).apply()
     }
 
@@ -384,17 +544,28 @@ class ClinicDemoStore(context: Context) {
             }
             if (root.has("doses")) {
                 val arr = root.getJSONArray("doses")
+                val fallbackDay = calendarToday()
                 doses = buildList {
                     for (i in 0 until arr.length()) {
                         val o = arr.getJSONObject(i)
+                        val status = runCatching { DoseStatus.valueOf(o.getString("status")) }
+                            .getOrDefault(DoseStatus.PENDING)
                         add(
                             MedDose(
                                 id = o.getString("id"),
+                                medicationId = o.optString("medicationId"),
                                 drugName = o.getString("drugName"),
                                 doseLabel = o.getString("doseLabel"),
                                 time = LocalTime.parse(o.getString("time")),
-                                status = DoseStatus.valueOf(o.getString("status")),
-                                takenAtMs = o.optLong("takenAtMs").takeIf { o.has("takenAtMs") && !o.isNull("takenAtMs") && it > 0 },
+                                day = runCatching { LocalDate.parse(o.getString("day")) }
+                                    .getOrDefault(fallbackDay),
+                                status = status,
+                                takenAtMs = o.optLong("takenAtMs").takeIf {
+                                    o.has("takenAtMs") && !o.isNull("takenAtMs") && it > 0
+                                },
+                                skipReason = o.optString("skipReason").takeIf {
+                                    o.has("skipReason") && !o.isNull("skipReason") && it.isNotBlank()
+                                },
                             ),
                         )
                     }
@@ -420,6 +591,31 @@ class ClinicDemoStore(context: Context) {
                     }
                 }
             }
+            if (root.has("sessions")) {
+                val arr = root.getJSONArray("sessions")
+                sessions = buildList {
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        add(
+                            PlannedSession(
+                                id = o.getString("id"),
+                                date = LocalDate.parse(o.getString("date")),
+                                time = LocalTime.parse(o.getString("time")),
+                                kind = PlannedSessionKind.valueOf(o.getString("kind")),
+                                title = o.optString("title", "Trening sekwencyjny"),
+                                status = PlannedSessionStatus.valueOf(o.getString("status")),
+                                completedAtMs = o.optLong("completedAtMs").takeIf {
+                                    o.has("completedAtMs") && !o.isNull("completedAtMs") && it > 0
+                                },
+                            ),
+                        )
+                    }
+                }
+            }
+            if (root.has("activePlanDay")) {
+                activePlanDay = runCatching { LocalDate.parse(root.getString("activePlanDay")) }
+                    .getOrDefault(calendarToday())
+            }
         }
     }
 
@@ -434,7 +630,7 @@ class ClinicDemoStore(context: Context) {
         Regex("\\b(\\d{1,2}:\\d{2})\\b").findAll(scheduleNote).map { it.groupValues[1] }.toList()
 
     private fun at(daysAgo: Long, hour: Int, minute: Int = 0): Long =
-        today.minusDays(daysAgo).atTime(hour, minute).atZone(zone).toInstant().toEpochMilli()
+        calendarToday().minusDays(daysAgo).atTime(hour, minute).atZone(zone).toInstant().toEpochMilli()
 
     private fun defaultMeasurements(): List<ClinicMeasurement> {
         val sessionDone = "sess-done"
@@ -500,7 +696,7 @@ class ClinicDemoStore(context: Context) {
 
     private fun defaultDiseases(): List<Disease> = emptyList()
 
-    private fun defaultSessions(): List<PlannedSession> {
+    private fun defaultSessions(today: LocalDate): List<PlannedSession> {
         val base = mutableListOf(
             PlannedSession(
                 "s0", today, LocalTime.of(10, 0),

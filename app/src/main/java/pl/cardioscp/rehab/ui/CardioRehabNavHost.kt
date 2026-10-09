@@ -107,7 +107,9 @@ fun CardioRehabNavHost(
                     AppDestination.MEASUREMENTS -> MeasurementsScreen(clinic = clinic)
                     AppDestination.MEDS -> MedsScreen(
                         clinic = clinic,
-                        onMarkTaken = viewModel::markDoseTaken,
+                        onConfirmTaken = viewModel::confirmDoseTaken,
+                        onSkip = viewModel::skipDose,
+                        onSnooze = viewModel::snoozeDose,
                         onAddMedication = viewModel::addMedication,
                         onRemoveMedication = viewModel::removeMedication,
                     )

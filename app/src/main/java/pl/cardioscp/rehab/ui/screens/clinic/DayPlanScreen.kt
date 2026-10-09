@@ -45,6 +45,7 @@ import pl.cardioscp.rehab.clinic.DayPlanKind
 import pl.cardioscp.rehab.clinic.DayPlanTone
 import pl.cardioscp.rehab.ui.theme.ProPlusColors
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val ToneOnTime = Color(0xFFE8F5E9)
 private val ToneLate = Color(0xFFFFF8E1)
@@ -54,6 +55,7 @@ private val ToneUpcoming = ProPlusColors.Surface
 @Composable
 fun DayPlanScreen(clinic: ClinicSnapshot) {
     val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
+    val dateFmt = DateTimeFormatter.ofPattern("EEEE, d.MM.yyyy", Locale.forLanguageTag("pl-PL"))
     var calendarView by remember { mutableStateOf(false) }
     Column(
         Modifier
@@ -66,7 +68,17 @@ fun DayPlanScreen(clinic: ClinicSnapshot) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Plan na dziś", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
+            Column {
+                Text("Plan na dziś", style = MaterialTheme.typography.headlineMedium, color = ProPlusColors.Navy)
+                Text(
+                    clinic.planDate.format(dateFmt).replaceFirstChar {
+                        if (it.isLowerCase()) it.titlecase(Locale.forLanguageTag("pl-PL")) else it.toString()
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    color = ProPlusColors.Accent,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             IconButton(onClick = { calendarView = !calendarView }) {
                 Icon(
                     imageVector = if (calendarView) Icons.Outlined.ViewAgenda else Icons.Outlined.CalendarViewDay,
@@ -84,7 +96,7 @@ fun DayPlanScreen(clinic: ClinicSnapshot) {
             if (calendarView) {
                 "Kalendarz dnia · leki i sesja w siatce godzin"
             } else {
-                "Leki i sesja rehabilitacji. Dodatkowe pomiary pacjenta pojawiają się jako wykonane."
+                "Leki i sesja rehabilitacji. Po północy plan i dawki odświeżają się na nowy dzień."
             },
             style = MaterialTheme.typography.bodyMedium,
             color = ProPlusColors.Muted,

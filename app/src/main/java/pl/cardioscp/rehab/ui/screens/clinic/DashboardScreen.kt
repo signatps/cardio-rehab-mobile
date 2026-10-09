@@ -82,7 +82,7 @@ fun DashboardScreen(
     val pulseText = livePulseBpm?.let { "$it bpm" }
         ?: clinic.measurements.firstOrNull { it.kind == VitalKind.PULSE }?.valueText
         ?: "—"
-    val pendingDoses = clinic.todayDoses.count { it.status == DoseStatus.PENDING }
+    val pendingDoses = clinic.todayDoses.count { it.needsAction }
     val welcomeHint = WelcomePhrase.buildFromClinic(clinic)
     val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
     val bpColor = whoColorForBpText(bp?.valueText)
@@ -207,7 +207,11 @@ fun DashboardScreen(
             )
         }
 
-        Text("Plan na dziś", style = MaterialTheme.typography.titleLarge, color = ProPlusColors.Navy)
+        Text(
+            "Plan na dziś · ${clinic.planDate.format(java.time.format.DateTimeFormatter.ofPattern("d.MM.yyyy"))}",
+            style = MaterialTheme.typography.titleLarge,
+            color = ProPlusColors.Navy,
+        )
         clinic.dayPlan.take(8).forEach { item ->
             if (item.kind == DayPlanKind.SESSION) {
                 SessionPlanTile(

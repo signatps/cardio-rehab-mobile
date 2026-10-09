@@ -42,11 +42,26 @@ class WelcomePhraseTest {
         val today = LocalDate.of(2026, 10, 8)
         val clinic = ClinicSnapshot(
             patientName = "Jan Kowalski",
+            planDate = today,
             measurements = emptyList(),
             medications = emptyList(),
             todayDoses = listOf(
-                MedDose("d1", "Bisoprolol", "5 mg", LocalTime.of(8, 0), DoseStatus.PENDING),
-                MedDose("d2", "ASA", "75 mg", LocalTime.of(20, 0), DoseStatus.TAKEN),
+                MedDose(
+                    id = "d1",
+                    drugName = "Bisoprolol",
+                    doseLabel = "5 mg",
+                    time = LocalTime.of(8, 0),
+                    day = today,
+                    status = DoseStatus.PENDING,
+                ),
+                MedDose(
+                    id = "d2",
+                    drugName = "ASA",
+                    doseLabel = "75 mg",
+                    time = LocalTime.of(20, 0),
+                    day = today,
+                    status = DoseStatus.TAKEN,
+                ),
             ),
             diseases = emptyList(),
             sessions = listOf(

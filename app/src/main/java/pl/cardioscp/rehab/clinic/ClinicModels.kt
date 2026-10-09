@@ -23,17 +23,25 @@ data class ClinicMeasurement(
     val sessionGroupTitle: String? = null,
 )
 
-enum class DoseStatus { PENDING, TAKEN, SKIPPED }
+enum class DoseStatus { PENDING, TAKEN, SKIPPED, SNOOZED }
 
 data class MedDose(
     val id: String,
+    val medicationId: String = "",
     val drugName: String,
     val doseLabel: String,
     val time: LocalTime,
+    /** Dzień kalendarzowy dawki (plan dnia / rollover o północy). */
+    val day: LocalDate = LocalDate.now(),
     val status: DoseStatus,
-    /** Kiedy oznaczono jako przyjęte (do oceny terminowości w planie dnia). */
+    /** Kiedy potwierdzono (przyjęte / pominięte / później). */
     val takenAtMs: Long? = null,
-)
+    /** Powód pominięcia — wymagany przy [DoseStatus.SKIPPED]. */
+    val skipReason: String? = null,
+) {
+    val needsAction: Boolean
+        get() = status == DoseStatus.PENDING || status == DoseStatus.SNOOZED
+}
 
 enum class DiseaseStatus { AKTUALNA, PRZEWLEKLA, HISTORYCZNA }
 
@@ -106,6 +114,8 @@ data class DayPlanItem(
 
 data class ClinicSnapshot(
     val patientName: String,
+    /** Aktualna data planu (kalendarzowa). */
+    val planDate: LocalDate,
     val measurements: List<ClinicMeasurement>,
     val medications: List<Medication>,
     val todayDoses: List<MedDose>,

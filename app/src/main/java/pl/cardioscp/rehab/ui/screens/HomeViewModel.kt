@@ -174,6 +174,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     init {
+        // Po północy odśwież plan dnia / dawki / sesję bez restartu aplikacji.
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(30_000)
+                publishClinic()
+            }
+        }
         viewModelScope.launch {
             sessionController.status.collect { status ->
                 sessionLabel.value = when (status) {
@@ -303,11 +310,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Liczba alertów na pulpit (dawki zaległe + ciśnienie poza WHO). */
     fun dashboardAlertCount(): Int {
+        val snap = clinicStore.snapshot()
         val now = java.time.LocalTime.now()
-        var n = clinicStore.snapshot().todayDoses.count {
-            it.status == DoseStatus.PENDING && !it.time.isAfter(now)
+        var n = snap.todayDoses.count {
+            it.needsAction && !it.time.isAfter(now)
         }
-        val bp = clinicStore.snapshot().measurements.firstOrNull { it.kind == VitalKind.BLOOD_PRESSURE }
+        val bp = snap.measurements.firstOrNull { it.kind == VitalKind.BLOOD_PRESSURE }
         val m = bp?.valueText?.let { Regex("""(\d+)\s*/\s*(\d+)""").find(it) }
         if (m != null) {
             val band = pl.cardioscp.rehab.ble.BpWho.band(
@@ -327,21 +335,51 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun markDoseTaken(id: String) {
-        clinicStore.markDoseTaken(id)
-        _clinic.value = clinicStore.snapshot()
+        confirmDoseTaken(id)
+    }
+
+    fun confirmDoseTaken(id: String) {
+        clinicStore.confirmDose(id, DoseStatus.TAKEN)
+        publishClinic()
         MedReminderScheduler.reschedule(getApplication(), clinicStore)
+    }
+
+    fun skipDose(id: String, reason: String) {
+        clinicStore.confirmDose(id, DoseStatus.SKIPPED, skipReason = reason)
+        publishClinic()
+        MedReminderScheduler.reschedule(getApplication(), clinicStore)
+    }
+
+    fun snoozeDose(id: String, hhmm: String) {
+        val normalized = hhmm.trim()
+        val time = runCatching {
+            val parts = normalized.split(':')
+            java.time.LocalTime.of(
+                parts[0].toInt().coerceIn(0, 23),
+                parts.getOrNull(1)?.toInt()?.coerceIn(0, 59) ?: 0,
+            )
+        }.getOrNull() ?: return
+        clinicStore.confirmDose(id, DoseStatus.SNOOZED, newTime = time)
+        publishClinic()
+        MedReminderScheduler.reschedule(getApplication(), clinicStore)
+    }
+
+    private fun publishClinic() {
+        val before = _clinic.value.planDate
+        _clinic.value = clinicStore.snapshot()
+        if (_clinic.value.planDate != before) dayPlanWelcomeSpoken = false
     }
 
     fun addMedication(name: String, dose: String, times: List<String>, note: String) {
         clinicStore.addMedication(name, dose, times, note)
-        _clinic.value = clinicStore.snapshot()
+        publishClinic()
         MedReminderScheduler.reschedule(getApplication(), clinicStore)
         maybeNotifyDueMed()
     }
 
     fun removeMedication(id: String) {
         if (!clinicStore.removeMedication(id)) return
-        _clinic.value = clinicStore.snapshot()
+        publishClinic()
         MedReminderScheduler.reschedule(getApplication(), clinicStore)
     }
 
@@ -438,7 +476,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             refreshEcgArchive()
         }
         clinicStore.markTodayRehabSessionDone()
-        _clinic.value = clinicStore.snapshot()
+        publishClinic()
     }
 
     /** Najnowsza zarchiwizowana sesja z dziś — do kafelka na pulpicie. */
