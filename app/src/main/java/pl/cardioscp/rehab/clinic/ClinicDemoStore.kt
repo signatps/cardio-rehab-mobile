@@ -15,7 +15,7 @@ class ClinicDemoStore(context: Context) {
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val zone = ZoneId.systemDefault()
 
-    private var measurements = defaultMeasurements()
+    private var measurements: List<ClinicMeasurement> = emptyList()
     private var medications = defaultMedications()
     private var doses = defaultDoses()
     private var diseases = defaultDiseases()
@@ -25,6 +25,8 @@ class ClinicDemoStore(context: Context) {
 
     init {
         loadPersisted()
+        // Usuń historyczne seed-y demo (stare instalacje miały fikcyjne pomiary w pamięci).
+        measurements = measurements.filterNot { it.id in SEED_MEASUREMENT_IDS }
         refreshCalendarDay()
     }
 
@@ -82,6 +84,7 @@ class ClinicDemoStore(context: Context) {
                 sessionGroupTitle = sessionGroupTitle,
             ),
         ) + measurements
+        persist()
     }
 
     fun markDoseTaken(id: String) {
@@ -553,6 +556,24 @@ class ClinicDemoStore(context: Context) {
                 )
             }
         })
+        root.put(
+            "measurements",
+            JSONArray().also { arr ->
+                measurements.forEach { m ->
+                    arr.put(
+                        JSONObject()
+                            .put("id", m.id)
+                            .put("kind", m.kind.name)
+                            .put("label", m.label)
+                            .put("valueText", m.valueText)
+                            .put("measuredAtMs", m.measuredAtMs)
+                            .put("note", m.note)
+                            .put("sessionGroupId", m.sessionGroupId ?: JSONObject.NULL)
+                            .put("sessionGroupTitle", m.sessionGroupTitle ?: JSONObject.NULL),
+                    )
+                }
+            },
+        )
         root.put("activePlanDay", activePlanDay.toString())
         prefs.edit().putString(KEY_STATE, root.toString()).apply()
     }
@@ -561,6 +582,37 @@ class ClinicDemoStore(context: Context) {
         val raw = prefs.getString(KEY_STATE, null) ?: return
         runCatching {
             val root = JSONObject(raw)
+            if (root.has("measurements")) {
+                val arr = root.getJSONArray("measurements")
+                measurements = buildList {
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        val id = o.getString("id")
+                        if (id in SEED_MEASUREMENT_IDS) continue
+                        add(
+                            ClinicMeasurement(
+                                id = id,
+                                kind = runCatching { VitalKind.valueOf(o.getString("kind")) }
+                                    .getOrDefault(VitalKind.PULSE),
+                                label = o.getString("label"),
+                                valueText = o.getString("valueText"),
+                                measuredAtMs = o.getLong("measuredAtMs"),
+                                note = o.optString("note", ""),
+                                sessionGroupId = if (o.isNull("sessionGroupId")) {
+                                    null
+                                } else {
+                                    o.optString("sessionGroupId").ifBlank { null }
+                                },
+                                sessionGroupTitle = if (o.isNull("sessionGroupTitle")) {
+                                    null
+                                } else {
+                                    o.optString("sessionGroupTitle").ifBlank { null }
+                                },
+                            ),
+                        )
+                    }
+                }
+            }
             if (root.has("medications")) {
                 val arr = root.getJSONArray("medications")
                 medications = buildList {
@@ -671,67 +723,6 @@ class ClinicDemoStore(context: Context) {
     private fun parseTimes(scheduleNote: String): List<String> =
         Regex("\\b(\\d{1,2}:\\d{2})\\b").findAll(scheduleNote).map { it.groupValues[1] }.toList()
 
-    private fun at(daysAgo: Long, hour: Int, minute: Int = 0): Long =
-        calendarToday().minusDays(daysAgo).atTime(hour, minute).atZone(zone).toInstant().toEpochMilli()
-
-    private fun defaultMeasurements(): List<ClinicMeasurement> {
-        val sessionDone = "sess-done"
-        val sessionTitle = "Sesja rehab · trening sekwencyjny"
-        val sessionOlder = "sess-older"
-        val sessionOlderTitle = "Sesja rehab · trening sekwencyjny"
-        return listOf(
-            ClinicMeasurement("m1", VitalKind.BLOOD_PRESSURE, "Ciśnienie", "128/82 · 72/min", at(0, 8, 10)),
-            ClinicMeasurement("m2", VitalKind.WEIGHT, "Masa", "78.2 kg", at(0, 8, 5)),
-            ClinicMeasurement("m6", VitalKind.SPO2, "SpO₂", "97%", at(3, 10, 0)),
-            ClinicMeasurement(
-                "s3-bp", VitalKind.BLOOD_PRESSURE, "Ciśnienie przed", "126/80 · 70/min",
-                at(2, 10, 5), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
-            ),
-            ClinicMeasurement(
-                "s3-w", VitalKind.WEIGHT, "Masa", "78.4 kg",
-                at(2, 10, 8), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
-            ),
-            ClinicMeasurement(
-                "s3-ecg0", VitalKind.ECG, "EKG spoczynkowe", "SCP · 5 s",
-                at(2, 10, 12), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
-            ),
-            ClinicMeasurement(
-                "s3-p1", VitalKind.PULSE, "Tętno wysiłek 1", "98 bpm",
-                at(2, 10, 14), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
-            ),
-            ClinicMeasurement(
-                "s3-ecg1", VitalKind.ECG, "EKG szczyt 1", "SCP · 5 s",
-                at(2, 10, 16), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
-            ),
-            ClinicMeasurement(
-                "s3-p2", VitalKind.PULSE, "Tętno wysiłek 2", "104 bpm",
-                at(2, 10, 18), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
-            ),
-            ClinicMeasurement(
-                "s3-ecg2", VitalKind.ECG, "EKG szczyt 2", "SCP · 5 s",
-                at(2, 10, 20), sessionGroupId = sessionDone, sessionGroupTitle = sessionTitle,
-            ),
-            ClinicMeasurement(
-                "s4-bp", VitalKind.BLOOD_PRESSURE, "Ciśnienie przed", "132/84 · 74/min",
-                at(5, 10, 5), sessionGroupId = sessionOlder, sessionGroupTitle = sessionOlderTitle,
-            ),
-            ClinicMeasurement(
-                "s4-ecg0", VitalKind.ECG, "EKG spoczynkowe", "SCP · 5 s",
-                at(5, 10, 10), sessionGroupId = sessionOlder, sessionGroupTitle = sessionOlderTitle,
-            ),
-            ClinicMeasurement(
-                "s4-p1", VitalKind.PULSE, "Tętno wysiłek", "92 bpm",
-                at(5, 10, 12), sessionGroupId = sessionOlder, sessionGroupTitle = sessionOlderTitle,
-            ),
-            ClinicMeasurement(
-                "s4-ecg1", VitalKind.ECG, "EKG szczyt", "SCP · 5 s",
-                at(5, 10, 14), sessionGroupId = sessionOlder, sessionGroupTitle = sessionOlderTitle,
-            ),
-            ClinicMeasurement("m7", VitalKind.BLOOD_PRESSURE, "Ciśnienie", "126/80 · 70/min", at(4, 8, 20)),
-            ClinicMeasurement("m3", VitalKind.PULSE, "Tętno", "68 bpm", at(1, 9, 0)),
-        )
-    }
-
     private fun defaultMedications(): List<Medication> = emptyList()
 
     private fun defaultDoses(): List<MedDose> = emptyList()
@@ -796,7 +787,14 @@ class ClinicDemoStore(context: Context) {
 
     companion object {
         private const val PREFS = "clinic_demo"
-        /** v2 — puste leki/choroby (bez seedów testowych). */
+        /** v2 — puste leki/choroby; pomiary tylko z realnych pomiarów (bez seedów). */
         private const val KEY_STATE = "state_v2"
+
+        /** Identyfikatory starych fikcyjnych pomiarów — nie pokazujemy ich w historii. */
+        private val SEED_MEASUREMENT_IDS = setOf(
+            "m1", "m2", "m3", "m6", "m7",
+            "s3-bp", "s3-w", "s3-ecg0", "s3-p1", "s3-ecg1", "s3-p2", "s3-ecg2",
+            "s4-bp", "s4-ecg0", "s4-p1", "s4-ecg1",
+        )
     }
 }

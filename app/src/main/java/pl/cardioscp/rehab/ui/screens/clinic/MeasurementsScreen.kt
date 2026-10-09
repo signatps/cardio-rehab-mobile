@@ -109,37 +109,44 @@ fun MeasurementsScreen(clinic: ClinicSnapshot) {
 
         when (val f = filter) {
             is MeasureFilter.All -> {
-                HistoryHeader()
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(0.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp),
-                ) {
-                    sessionBuckets.forEach { bucket ->
-                        item(key = "g-${bucket.id}") {
-                            SessionGroupHeader(bucket = bucket, timeFmt = timeFmt)
+                if (sessionBuckets.isEmpty() && standalone.isEmpty()) {
+                    Text(
+                        "Brak pomiarów. Historia pojawi się po wykonaniu pomiaru lub sesji.",
+                        color = ProPlusColors.Muted,
+                    )
+                } else {
+                    HistoryHeader()
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
+                        contentPadding = PaddingValues(bottom = 16.dp),
+                    ) {
+                        sessionBuckets.forEach { bucket ->
+                            item(key = "g-${bucket.id}") {
+                                SessionGroupHeader(bucket = bucket, timeFmt = timeFmt)
+                            }
+                            items(bucket.items, key = { it.id }) { m ->
+                                MeasurementRow(m = m, timeFmt = timeFmt, indented = true)
+                            }
+                            item(key = "d-${bucket.id}") {
+                                HorizontalDivider(
+                                    Modifier.padding(vertical = 6.dp),
+                                    color = ProPlusColors.Line,
+                                )
+                            }
                         }
-                        items(bucket.items, key = { it.id }) { m ->
-                            MeasurementRow(m = m, timeFmt = timeFmt, indented = true)
-                        }
-                        item(key = "d-${bucket.id}") {
-                            HorizontalDivider(
-                                Modifier.padding(vertical = 6.dp),
-                                color = ProPlusColors.Line,
-                            )
-                        }
-                    }
-                    if (standalone.isNotEmpty()) {
-                        item(key = "standalone-h") {
-                            Text(
-                                "Pomiary poza sesją",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = ProPlusColors.Navy,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(vertical = 6.dp),
-                            )
-                        }
-                        items(standalone, key = { it.id }) { m ->
-                            MeasurementRow(m = m, timeFmt = timeFmt, indented = false)
+                        if (standalone.isNotEmpty()) {
+                            item(key = "standalone-h") {
+                                Text(
+                                    "Pomiary poza sesją",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = ProPlusColors.Navy,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(vertical = 6.dp),
+                                )
+                            }
+                            items(standalone, key = { it.id }) { m ->
+                                MeasurementRow(m = m, timeFmt = timeFmt, indented = false)
+                            }
                         }
                     }
                 }
