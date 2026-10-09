@@ -390,6 +390,8 @@ class RehabSessionEngine(
         limit: CycleHeartRateLimit?,
     ) {
         val bpmSamples = mutableListOf<Int>()
+        // Online: tętno z R-R na przebiegu EKG (nie GetPulse). Offline: brak strumienia → brak BPM.
+        ensureHrSourceForTraining()
         pulseWatchJob?.cancel()
         pulseWatchJob = scope.launch {
             sessionController.lastPulseBpm.collect { bpm ->
@@ -408,18 +410,6 @@ class RehabSessionEngine(
                             coachVisual = TrainingCoachVisual.EXERCISE,
                             message = buildExerciseMessage(phase, bpm, limit, cue),
                         ),
-                    )
-                }
-            }
-        }
-        val pulseJob = scope.launch {
-            runCatching {
-                runPulseForPhase(phase.durationSec)
-            }.onFailure { e ->
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                update {
-                    it.copy(
-                        statusMessage = "Puls: ${e.message ?: "błąd"} — kończę fazę",
                     )
                 }
             }
@@ -447,14 +437,8 @@ class RehabSessionEngine(
             }
             delay(1_000)
         }
-        if (skipCurrentPhase || abortTraining) {
-            pulseJob.cancel()
-            stopPulseOnly()
-        }
-        runCatching { pulseJob.join() }
         pulseWatchJob?.cancel()
         pulseWatchJob = null
-        stopPulseOnly()
         val samples = synchronized(bpmSamples) { bpmSamples.toList() }
         val summary = CycleHrSummary.fromSamples(phase.cycle, limit, samples)
         update {
@@ -477,6 +461,7 @@ class RehabSessionEngine(
 
     /** Odpoczynek z pomiarem tętna (bez limitu / coachingu — tylko liczba w UI). */
     private suspend fun runRestWithPulse(phase: TrainingPhase) {
+        ensureHrSourceForTraining()
         pulseWatchJob?.cancel()
         pulseWatchJob = scope.launch {
             sessionController.lastPulseBpm.collect { bpm ->
@@ -494,16 +479,6 @@ class RehabSessionEngine(
                             message = "Odpoczynek · $pulsePart",
                         ),
                     )
-                }
-            }
-        }
-        val pulseJob = scope.launch {
-            runCatching {
-                runPulseForPhase(phase.durationSec)
-            }.onFailure { e ->
-                if (e is kotlinx.coroutines.CancellationException) throw e
-                update {
-                    it.copy(statusMessage = "Puls: ${e.message ?: "błąd"} — kończę odpoczynek")
                 }
             }
         }
@@ -526,31 +501,18 @@ class RehabSessionEngine(
             }
             delay(1_000)
         }
-        if (skipCurrentPhase || abortTraining) {
-            pulseJob.cancel()
-            stopPulseOnly()
-        }
-        runCatching { pulseJob.join() }
         pulseWatchJob?.cancel()
         pulseWatchJob = null
-        stopPulseOnly()
         delay(200)
     }
 
-    private suspend fun runPulseForPhase(durationSec: Int) {
+    /**
+     * Tętno w treningu wyłącznie z R-R na strumieniu Online (nasze algorytmy).
+     * GetPulse nie jest używany.
+     */
+    private suspend fun ensureHrSourceForTraining() {
         if ((_state.value?.ecgMode ?: EcgAcquisitionMode.OFFLINE) == EcgAcquisitionMode.ONLINE) {
-            sessionController.runPulseDuringOnline(durationSec)
-        } else {
-            sessionController.runPulseFor(durationSec)
-        }
-    }
-
-    /** Offline: stop scenariusza pulsu. Online: nie gasimy ciągłego Online. */
-    private fun stopPulseOnly() {
-        if ((_state.value?.ecgMode ?: EcgAcquisitionMode.OFFLINE) == EcgAcquisitionMode.ONLINE) {
-            // Puls stop już w runPulseDuringOnline; nie ruszamy sesji Online.
-        } else {
-            sessionController.stop()
+            ensureOnlineSessionRunning()
         }
     }
 

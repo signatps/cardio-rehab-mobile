@@ -88,8 +88,7 @@ import pl.cardioscp.rehab.session.ExerciseKind
 import pl.cardioscp.rehab.session.HeartRateCoach
 import pl.cardioscp.rehab.session.HeartRateCoachCue
 import pl.cardioscp.rehab.session.HeartRateValueTone
-import pl.cardioscp.rehab.ecg.HeartRateStatsEngine
-import pl.cardioscp.rehab.ecg.Lead
+import pl.cardioscp.rehab.session.LiveEcgHr
 import pl.cardioscp.rehab.session.LiveEcgSnapshot
 import pl.cardioscp.rehab.session.RehabStep
 import pl.cardioscp.rehab.session.TrainingCoachVisual
@@ -1269,7 +1268,7 @@ private fun LiveEcgPreview(
 ) {
     val bpm = remember(showHrFromEcg, liveEcg?.generation, liveEcg?.samplingHz) {
         if (showHrFromEcg && liveEcg != null && liveEcg.hasTrace) {
-            liveHrFromSnapshot(liveEcg)
+            LiveEcgHr.fromSnapshot(liveEcg)
         } else {
             null
         }
@@ -1348,18 +1347,6 @@ private fun LiveEcgPreview(
     }
 }
 
-private fun liveHrFromSnapshot(snap: LiveEcgSnapshot): Int? {
-    val leads = linkedMapOf<Lead, DoubleArray>()
-    for ((label, samples) in snap.leads) {
-        val lead = when (label) {
-            "Vx", "V1" -> Lead.V1
-            else -> runCatching { Lead.fromLabel(label) }.getOrNull()
-        } ?: continue
-        leads[lead] = samples
-    }
-    if (leads.isEmpty()) return null
-    return HeartRateStatsEngine.liveFromLeads(leads, snap.samplingHz, windowSec = 8.0)
-}
 
 @Composable
 private fun SummaryContent(

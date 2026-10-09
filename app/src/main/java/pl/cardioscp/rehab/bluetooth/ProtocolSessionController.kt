@@ -28,6 +28,7 @@ import pl.cardioscp.rehab.bluetooth.protocol.ScpDownloadOrchestrator
 import pl.cardioscp.rehab.bluetooth.protocol.SequenceGenerator
 import pl.cardioscp.rehab.scp.MinimalScpWriter
 import pl.cardioscp.rehab.session.LiveEcgBuffer
+import pl.cardioscp.rehab.session.LiveEcgHr
 import pl.cardioscp.rehab.session.LiveEcgSnapshot
 import pl.cardioscp.rehab.session.SessionEcgTape
 
@@ -91,6 +92,9 @@ class ProtocolSessionController(
     private var electrodePollJob: Job? = null
     private var activeOutcome: CompletableDeferred<Status>? = null
     private var onlineStartedAtMs: Long = 0L
+    /** Throttle przeliczania R-R z taśmy Online (ms). */
+    private var lastEcgHrAtMs: Long = 0L
+    private val ecgHrMinIntervalMs: Long = 500L
 
     init {
         electrodeListenJob = scope.launch(Dispatchers.IO) {
@@ -229,6 +233,8 @@ class ProtocolSessionController(
             prepareDevice()
             liveEcgBuffer.reset()
             sessionTape.reset()
+            _lastPulseBpm.value = null
+            lastEcgHrAtMs = 0L
             publishLiveEcg()
             val orch = EcgOnlineSessionOrchestrator(commands = commands)
             onlineSessionOrch = orch
@@ -422,7 +428,22 @@ class ProtocolSessionController(
     }
 
     private fun publishLiveEcg() {
-        _liveEcg.value = liveEcgBuffer.snapshot()
+        val snap = liveEcgBuffer.snapshot()
+        _liveEcg.value = snap
+        maybePublishHrFromEcg(snap)
+    }
+
+    /**
+     * Tętno z detekcji R-R na próbkach Online ([HeartRateStatsEngine]) —
+     * nie z GetPulse urządzenia.
+     */
+    private fun maybePublishHrFromEcg(snap: LiveEcgSnapshot) {
+        if (!snap.hasTrace || snap.onlineUnsupported) return
+        val now = System.currentTimeMillis()
+        if (now - lastEcgHrAtMs < ecgHrMinIntervalMs) return
+        lastEcgHrAtMs = now
+        val bpm = LiveEcgHr.fromSnapshot(snap) ?: return
+        if (bpm > 0) publishPulse(bpm)
     }
 
     private suspend fun prepareDevice() {
@@ -477,7 +498,10 @@ class ProtocolSessionController(
         for (event in events) {
             when (event) {
                 is ScenarioEvent.Outbound -> client.sendFrame(event.frame)
-                is ScenarioEvent.Pulse -> publishPulse(event.bpm)
+                // GetPulse ignorujemy w sesji Online — BPM tylko z R-R na przebiegu EKG.
+                is ScenarioEvent.Pulse -> {
+                    if (onlineSessionOrch == null) publishPulse(event.bpm)
+                }
                 is ScenarioEvent.ScpFileReady -> {
                     _lastScpBytes.value = event.bytes
                     _status.value = Status.Info("Pobrano cały plik SCP (${event.bytes.size} B)")
